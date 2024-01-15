@@ -28,7 +28,7 @@ SECRET_KEY = "django-insecure-2utdo#g&cwq80y=xa*z18l1^d8+q4mv36wr1%w+c)h8nv=3yn+
 DEBUG = True
 TEMPLATE_DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['127.0.0.1', '.vercel.app']
 
 
 # Application definition
@@ -72,7 +72,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = "autoficate.wsgi.application"
+WSGI_APPLICATION = "autoficate.wsgi.app"
 
 
 # Database
