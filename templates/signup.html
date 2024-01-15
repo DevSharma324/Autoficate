@@ -1,0 +1,23 @@
+{% load static %} 
+
+<!DOCTYPE HTML>
+
+<HTML>
+
+    <form method="post">
+        {% csrf_token %}
+		
+		{{signup_form_errors}}<br>
+
+        {{ signup_form.first_name.label_tag }} {{ signup_form.first_name }}<br>
+    	{{ signup_form.last_name.label_tag }} {{ signup_form.last_name }}<br>
+        {{ signup_form.user_email.label_tag }} {{ signup_form.user_email }}<br>
+        {{ signup_form.password1.label_tag }} {{ signup_form.password1 }}<br>
+        {{ signup_form.password2.label_tag }} {{ signup_form.password2 }}<br><br>
+        Opt-in for Mail {{ signup_form.allow_promotional }}<br>
+		<br>
+
+        <button type="submit">Sign up</button>
+    </form>
+
+</HTML>

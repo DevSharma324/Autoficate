@@ -1,0 +1,20 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+django = "==4.2.8"
+pandas = "==2.1.4"
+openpyxl = "==3.1.2"
+pillow = "==10.1"
+fonttools = "==4.47.0"
+reportlab = "==4.0.8"
+whitenoise = "==6.6.0"
+cryptography = "==41.0.7"
+
+[dev-packages]
+
+[requires]
+python_version = "3.11"
+python_full_version = "3.11.3"

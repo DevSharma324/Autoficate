@@ -1,0 +1,231 @@
+{% load static %} 
+<!DOCTYPE HTML>
+<html>
+<head>
+    <!-- Include Spectrum CSS -->
+    <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/spectrum/1.8.1/spectrum.min.css">
+
+    <!-- Include jQuery (required for Spectrum) -->
+    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+
+    <!-- Include Spectrum JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/spectrum/1.8.1/spectrum.min.js"></script>
+
+    <style>
+        <link rel="stylesheet" type="text/css" href="{% static 'css/style.css' %}">
+    </style>
+</head>
+<body>
+    <div>
+        Session Name: {{ request.session.user_name }}<br>
+        Session Code: {{ request.session.user_code }} <br>
+        New User: {{ new_user }}<br>
+        Verified: {{ request.session.is_verified }}<br><br>
+        Cookie Consent: {{ request.session.cookie_consent }} 
+        set_cookie: {{ set_cookie }}
+    </div>
+
+    {% if request.session.cookie_consent and set_cookie %}
+        <h5>Logic To Set Cookie Will Execute Here...</h5>
+        Cookie Key: {{ cookie_key }}
+        Cookie Data(Encry): {{ cookie_data }}
+        Cookie Data(Decry): {{ cookie_data_temp }}
+    {% endif %}
+
+    {% if not new_user and request.session.cookie_consent is None %}
+        <form method="post">
+            {% csrf_token %}
+            Allow Cookies <br> <button type="submit" name="allow_cookies" value="True">Allow</button>    <button type="submit" name="allow_cookies" value="False">Don't Allow</button><br>
+        </form>
+    {% endif %}
+
+    {% if new_user %}
+        <div>
+            <hr>
+            New User:
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <br>{{ name_signup_form_errors.error }} <br>
+                
+                First Name: {{ name_signup_form.first_name }}<br>
+                Last Name: {{ name_signup_form.last_name }} <br>
+                Email (optional): {{ name_signup_form.user_email }} <br>
+                
+                <button type="submit" name="submit_name_signup" value="name_signup">Submit</button>
+            </form>
+        </div>
+    {% endif %} 
+
+    {% if not request.session.is_verified %}
+        <div>
+            <hr>
+            Login:
+            <form method="post">
+                {% csrf_token %}
+                <br>{{ login_form_errors.error.error }} <br>
+                
+                Email: {{ login_form.user_email }}<br>
+                Password: {{ login_form.password }} <br>
+                
+                <button type="submit" name="login" value="login">Submit</button>
+            </form>
+        </div>
+    {% endif %}
+
+    {% if request.session.user_code is not None and new_user or request.session.user_code is not None and request.session.is_verified %}
+        <div>
+            <hr>
+            Item Input:
+            <form method="post">
+                {% csrf_token %}
+                <br>{{ item_form_errors.error }}<br>
+                
+                Item Name: {{ item_form.item_heading }}<br>
+                Position: {{ item_form.position_x }}&nbsp;&nbsp;&nbsp;{{ item_form.position_y }}<br>
+                Size: {{ item_form.font_size }}<br>
+                Font: {{ item_form.font_select }}<br>
+                Color: {{ item_form.color }} <input type="text" name="color_picker" id="id_color_picker"><br>
+                
+                <button type="submit" name="submit_update" value="update_item_heading">Update Item</button>
+                <button type="submit" name="submit_add" value="add_blank_item_heading">+</button>
+            </form>
+        </div>
+
+        <div>
+            <hr>
+            Excel File Upload:
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <br>{{ excel_form_errors.error }} <br>
+
+                Status: {{ excel_file_status }} <br>
+                Excel Filename: {{ request.session.excel_file_name }} <br><br>
+                
+                {{ excel_form.excel_file }} <br>
+
+                <button type="submit" name="submit" value="load_excel_submit">Submit</button>
+            </form>
+        </div>
+
+        <div>
+            <hr>
+            Image Upload:
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <br>{{ image_form_errors.error }} <br>
+
+                Image Filename: {{ request.session.image_file_name }}<br>
+                Image URL: {{ request.session.image_url }}<br>
+                Image Render URL: {{ request.session.preview_url }}<br>
+                <img style="mix-blend-mode: multiply;" src="{% if request.session.preview_url == '' or request.session.preview_url is None %}{{ request.session.image_url }}{% else %}{{ request.session.preview_url }}{% endif %}" /> <br><br>
+
+                {{ image_form.image }} <br>
+
+                <button type="submit" name="submit" value="load_image_submit">Submit</button>
+            </form>
+        </div>
+
+        <div>
+            <hr>
+            {{ db_error_header }}<br>
+            Input List Window:
+            {% for header in request.session.inspector_header %}
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="header_item" value="{{ header }}">
+                    <button type="submit" name="inspector_header_item" value="{{ header }}">{{ header }}</button>&nbsp;&nbsp;
+                    <button type="submit" name="submit_remove" value="inspector_header_item_remove">-</button><br>
+                </form>
+            {% endfor %}
+        </div>
+
+        <div>
+            <hr>
+            {{ db_error_data }}<br>
+            Inspector Panel:
+            <form method="post">
+                {% csrf_token %}
+                {% if inspector_data is not None %}
+                    {% for item in inspector_data %}
+                        <input type="text" name="inspector_data_item" required value="{{ item }}">&nbsp;&nbsp;
+                        <button type="button" name="button" value="inspector_data_item_remove">-</button><br>
+                    {% endfor %}
+                    
+                {% endif %}
+                <br><button type="buttom" name="button" value="inspector_data_item_add">+</button>&nbsp;&nbsp;
+                
+                {% comment %} dont display fs list is empty {% endcomment %}
+                {% if inspector_data %}
+                    <button type="submit" name="submit" value="update_inspector_data">Update Data</button><br><br>
+                {% endif %}
+            </form>
+        </div>
+
+        <div>
+            <hr>
+            Export:
+            <form method="post">
+                {% csrf_token %}
+                {{ export_form_errors.error }}<br>
+                {{ export_form.export_format }}<br>
+                <button type="submit" name="submit" value="export_images">Export</button><br>
+            </form>
+        </div>
+
+        <div>
+            <hr>
+            Logout:
+            <form action="/logout/" method="get">
+                <button type="submit" name="logout" value="logout">Logout</button><br>
+            </form>
+        </div>
+    {% endif %}
+
+    <script>
+        // When the document is ready
+        $(document).ready(function () {
+            // Initialize Spectrum color picker
+            $('#id_color_picker').spectrum({
+                preferredFormat: "hexa", // Use the hexa format (including alpha)
+                showInput: true,
+                showPalette: true,
+                chooseText: "Select",
+                cancelText: "Cancel",
+                showInitial: true,
+                showAlpha: true,
+                maxSelectionSize: 4,
+                allowEmpty: false,
+                showButtons: false,
+                palette: [],
+            });
+            
+            {% if format_reverse %}
+                // Set Spectrum color picker's initial color value based on the value of the color input
+            
+                {% comment %} var initialColorVal = ; {% endcomment %}
+                $('#id_color_picker').spectrum("set", $('#id_color').val());
+
+                var hexString = $('#id_color_picker').spectrum("get").toHex8();
+                $('#id_color').val('#' + hexString.substring(2) + hexString.substring(0, 2));
+                console.log($('#id_color').val());
+            {% endif %}
+            
+
+            // Handle Spectrum's color change event
+            $('#id_color_picker').on('move.spectrum', function (e, color) {
+                // Update the color input with the rearranged format
+                var hexString = color.toHex8();
+                $('#id_color').val('#' + hexString.substring(2) + hexString.substring(0, 2));
+            });
+    
+            // Handle the input event on the color input
+            $('#id_color').on('input', function () {
+                var newColor = $(this).val();
+                // Set Spectrum's color with the rearranged format
+                $('#id_color_picker').spectrum("set", newColor.substring(7) + newColor.substring(1, 7));
+            });
+        });
+    </script>
+    
+</body>
+</html>
