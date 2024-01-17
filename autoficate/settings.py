@@ -23,12 +23,14 @@ INSTALLED_APPS = [
     "main",
     "django.contrib.admin",
     "django.contrib.auth",
-    'whitenoise.runserver_nostatic',    # For Local Development
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
 ]
+
+if ".vercel.app" not in os.environ.get("ALLOWED_HOSTS", ""):
+    INSTALLED_APPS.append("whitenoise.runserver_nostatic")  # For Local Development
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
