@@ -29,7 +29,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
 ]
 
-if ".vercel.app" not in os.environ.get("ALLOWED_HOSTS", ""):
+if os.environ.get("ALLOWED_HOSTS") is not ".vercel.app":
     INSTALLED_APPS.append("whitenoise.runserver_nostatic")  # For Local Development
 
 MIDDLEWARE = [
