@@ -13,10 +13,10 @@ from django.core.wsgi import get_wsgi_application
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'autoficate.settings')
 
-application = get_wsgi_application()
+app = get_wsgi_application()
 
 # Specify the correct path to STATIC_ROOT
 static_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'staticfiles')
 
 # `app` required for Vercel deployment
-app = WhiteNoise(application, root=static_root)
+# app = WhiteNoise(application, root=static_root)
