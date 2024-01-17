@@ -9,13 +9,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
-SECRET_KEY = os.environ.get("SECRET_KEY"))
+SECRET_KEY = os.environ.get("SECRET_KEY")
 
-DEBUG = False
-# DEBUG = bool(os.environ.get("DEBUG"))
-# TEMPLATE_DEBUG = bool(os.environ.get("DEBUG"))
+DEBUG = eval(os.environ.get("DEBUG", "False"))
+TEMPLATE_DEBUG = eval(os.environ.get("DEBUG", "False"))
 
-ALLOWED_HOSTS = list(os.environ.get("ALLOWED_HOSTS"))
+ALLOWED_HOSTS = [os.environ.get("ALLOWED_HOSTS")]
 
 
 # Application definition
@@ -24,6 +23,7 @@ INSTALLED_APPS = [
     "main",
     "django.contrib.admin",
     "django.contrib.auth",
+    'whitenoise.runserver_nostatic',    # For Local Development
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
@@ -79,7 +79,6 @@ DATABASES = {
         "USER": os.environ.get("POSTGRES_USER"),
         "PASSWORD": os.environ.get("POSTGRES_PASSWORD"),
         "HOST": os.environ.get("POSTGRES_HOST"),
-        "PORT": os.environ.get("POSTGRES_DB_PORT"),
     }
 }
 
