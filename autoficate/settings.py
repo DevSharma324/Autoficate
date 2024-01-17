@@ -9,13 +9,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
-SECRET_KEY = os.environ.get("SECRET_KEY"))
+SECRET_KEY = os.environ.get("SECRET_KEY")
 
-DEBUG = False
-# DEBUG = bool(os.environ.get("DEBUG"))
-# TEMPLATE_DEBUG = bool(os.environ.get("DEBUG"))
+DEBUG = eval(os.environ.get("DEBUG", "False"))
+TEMPLATE_DEBUG = eval(os.environ.get("DEBUG", "False"))
 
-ALLOWED_HOSTS = list(os.environ.get("ALLOWED_HOSTS"))
+ALLOWED_HOSTS = [os.environ.get("ALLOWED_HOSTS")]
 
 
 # Application definition
@@ -29,6 +28,9 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
 ]
+
+if os.environ.get("ALLOWED_HOSTS") is not ".vercel.app":
+    INSTALLED_APPS.append("whitenoise.runserver_nostatic")  # For Local Development
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
