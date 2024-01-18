@@ -6,6 +6,8 @@ from urllib.request import urlopen
 from zipfile import ZipFile
 import secrets
 
+from .vercel_blob import VercelBlobClient
+
 from cryptography.hazmat.primitives.asymmetric import padding
 import base64
 from cryptography.hazmat.backends import default_backend
