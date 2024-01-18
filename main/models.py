@@ -169,12 +169,11 @@ class ImageModel(models.Model):
         max_length=256,
         verbose_name="Image Name",
     )
-    image = models.ImageField(
-        upload_to="DBMedia/",
-        height_field=None,
-        width_field=None,
-        verbose_name="Background Image",
+    
+    image_url = models.TextField(
+        verbose_name="Image URL",
     )
+    
     export_image_count = models.PositiveIntegerField(
         default=0,
     )
