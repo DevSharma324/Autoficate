@@ -17,11 +17,14 @@
       "dest": "autoficate/wsgi.py"
     }
   ],
-  "build": {
-    "commands": [
-      {
-        "command": "python manage.py collectstatic --noinput"
-      }
-    ]
-  }
+  "commands": [
+    {
+      "use": "@vercel/static",
+      "input": "static/",
+      "output": "/public/static/"
+    },
+    {
+      "command": "python manage.py collectstatic --noinput"
+    }
+  ]
 }
