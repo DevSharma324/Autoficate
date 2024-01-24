@@ -10,22 +10,11 @@
   "routes": [
     {
       "src": "/static/(.*)",
-
       "dest": "/staticfiles/$1"
     },
     {
       "src": "/(.*)",
       "dest": "autoficate/wsgi.py"
-    }
-  ],
-  "commands": [
-    {
-      "use": "@vercel/static",
-      "input": "static/",
-      "output": "/public/static/"
-    },
-    {
-      "command": "python manage.py collectstatic --noinput"
     }
   ]
 }
