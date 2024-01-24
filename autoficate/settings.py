@@ -30,7 +30,7 @@ INSTALLED_APPS = [
 ]
 
 if os.environ.get("ALLOWED_HOSTS") != ".vercel.app":
-    INSTALLED_APPS.append("whitenoise.runserver_nostatic")  # For Local Development
+  INSTALLED_APPS.append("whitenoise.runserver_nostatic")  # For Local Development
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
