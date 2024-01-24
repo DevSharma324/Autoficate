@@ -10,8 +10,6 @@ import requests
 # debug onl yin developmwnt
 from django.views import debug
 
-
-from .vercel_blob import VercelBlobClient
 from .imagekit_media import ImageMediaLibrary
 
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -133,7 +131,7 @@ def exception_handler(func):
             success = True
 
         except ObjectDoesNotExist as e:
-            if hasattr(e, 'form_name') and e.form_name:
+            if hasattr(e, "form_name") and e.form_name:
                 instance.context[f"{e.form_name}_errors"]["error"] = None
             else:
                 instance.context["db_error"] = f"Object does not exist: {e.__str__()}"
@@ -142,7 +140,7 @@ def exception_handler(func):
             return debug.technical_500_response(instance.request, *sys.exc_info())
 
         except MultipleObjectsReturned as e:
-            if hasattr(e, 'form_name') and e.form_name:
+            if hasattr(e, "form_name") and e.form_name:
                 instance.context[f"{e.form_name}_errors"]["error"] = None
             else:
                 instance.context["db_error"] = f"Multiple Objects Found: {e.__str__()}"
@@ -153,7 +151,7 @@ def exception_handler(func):
         except ValidationError as e:
             print(e.__str__())
 
-            if hasattr(e, 'form_name') and e.form_name:
+            if hasattr(e, "form_name") and e.form_name:
                 instance.context[f"{e.form_name}_errors"]["error"] = None
             else:
                 instance.context["db_error"] = f"Validation Error: {e.__str__()}"
@@ -164,7 +162,7 @@ def exception_handler(func):
         except SuspiciousOperation as e:
             print(e.__str__())
 
-            if hasattr(e, 'form_name') and e.form_name:
+            if hasattr(e, "form_name") and e.form_name:
                 instance.context[f"{e.form_name}_errors"]["error"] = None
             else:
                 instance.context[
@@ -179,7 +177,7 @@ def exception_handler(func):
                 "Permission Denied: You do not have permission to perform this action."
             )
 
-            if hasattr(e, 'form_name') and e.form_name:
+            if hasattr(e, "form_name") and e.form_name:
                 instance.context[f"{e.form_name}_errors"]["error"] = None
             else:
                 instance.context[
@@ -192,7 +190,7 @@ def exception_handler(func):
         except ConnectionError as e:  # add any cache errors
             print(e.__str__())
 
-            if hasattr(e, 'form_name') and e.form_name:
+            if hasattr(e, "form_name") and e.form_name:
                 instance.context[f"{e.form_name}_errors"]["error"] = None
             else:
                 instance.context["db_error"] = f"Connection Error: {print(e.__str__())}"
@@ -203,7 +201,7 @@ def exception_handler(func):
         except TypeError as e:
             print(e.__str__())
 
-            if hasattr(e, 'form_name') and e.form_name:
+            if hasattr(e, "form_name") and e.form_name:
                 instance.context[f"{e.form_name}_errors"]["error"] = None
             else:
                 instance.context["db_error"] = f"Invalid Type: {print(e.__str__())}"
@@ -214,7 +212,7 @@ def exception_handler(func):
         except Http404:
             print("HTTP 404: The requested resource was not found.")
 
-            if hasattr(e, 'form_name') and e.form_name:
+            if hasattr(e, "form_name") and e.form_name:
                 instance.context[f"{e.form_name}_errors"]["error"] = None
             else:
                 instance.context["db_error"] = "The requested resource was not found."
@@ -225,7 +223,7 @@ def exception_handler(func):
         except IntegrityError as e:
             print(e.__str__())
 
-            if hasattr(e, 'form_name') and e.form_name:
+            if hasattr(e, "form_name") and e.form_name:
                 instance.context[f"{e.form_name}_errors"]["error"] = None
             else:
                 instance.context[
@@ -238,7 +236,7 @@ def exception_handler(func):
         except DataError as e:
             print(e.__str__())
 
-            if hasattr(e, 'form_name') and e.form_name:
+            if hasattr(e, "form_name") and e.form_name:
                 instance.context[f"{e.form_name}_errors"]["error"] = None
             else:
                 instance.context[
@@ -251,7 +249,7 @@ def exception_handler(func):
         except DatabaseError as e:
             print(e.__str__())
 
-            if hasattr(e, 'form_name') and e.form_name:
+            if hasattr(e, "form_name") and e.form_name:
                 instance.context[f"{e.form_name}_errors"]["error"] = None
             else:
                 instance.context["db_error"] = f"Database Error: ({e.__str__()})"
@@ -260,7 +258,7 @@ def exception_handler(func):
             return debug.technical_500_response(instance.request, *sys.exc_info())
 
         except OperationalError as e:
-            if hasattr(e, 'form_name') and e.form_name:
+            if hasattr(e, "form_name") and e.form_name:
                 instance.context[f"{e.form_name}_errors"]["error"] = None
             else:
                 instance.context[
@@ -274,7 +272,7 @@ def exception_handler(func):
             print(e.__str__())
 
             # Generic Error
-            if hasattr(e, 'form_name') and e.form_name:
+            if hasattr(e, "form_name") and e.form_name:
                 instance.context[f"{e.form_name}_errors"]["error"] = None
             else:
                 instance.context[
@@ -290,7 +288,7 @@ def exception_handler(func):
                 return render(
                     instance.request, instance.home_template, instance.context
                 )
-            
+
             else:
                 pass
 
