@@ -72,7 +72,7 @@
         </div>
     {% endif %}
 
-    {% if request.session.user_code is not None and new_user or request.session.user_code is not None and request.session.is_verified %}
+    {% if request.session.user_code is not None and not new_user or request.session.user_code is not None and request.session.is_verified %}
         <div>
             <hr>
             Item Input:
