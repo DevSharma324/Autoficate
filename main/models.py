@@ -2,7 +2,7 @@ from django.utils import timezone
 from django.contrib.auth.models import BaseUserManager, AbstractUser
 from django.db import models
 from django.utils.crypto import get_random_string
-
+from django.conf import settings
 import os
 
 
@@ -139,7 +139,7 @@ class DataItemSetModel(models.Model):
 
     # @staticmethod
     def search_font(font_name):
-        font_path = os.path.join("static", "fonts", f"{font_name}.ttf")
+        font_path = os.path.join(settings.STATIC_ROOT, "fonts", f"{font_name}.ttf")
 
         if os.path.exists(font_path):
             return font_path
