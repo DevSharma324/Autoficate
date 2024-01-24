@@ -12,7 +12,7 @@ start_time = time.time()
 
 application = get_wsgi_application()
 # Specify the correct path to STATIC_ROOT
-static_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), settings.STATIC_ROOT)
+static_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "staticfiles")
 
 # `app` required for Vercel deployment
 app = WhiteNoise(application, root=static_root)
@@ -23,3 +23,6 @@ elapsed_time = end_time - start_time
 print(
     f"\nWSGI took {elapsed_time:.6f} seconds to execute.\n"
 )
+
+print(settings.STATIC_ROOT)
+print(static_root)
