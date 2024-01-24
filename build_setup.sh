@@ -10,7 +10,7 @@ fi
 pipenv install --dev
 
 # Activate virtual environment
-source $(pipenv --venv)/bin/activate
+pipenv shell
 
 # Run collectstatic to gather static files
 python manage.py collectstatic --noinput
