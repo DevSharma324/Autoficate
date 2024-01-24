@@ -5,6 +5,13 @@ from io import BytesIO
 from urllib.request import urlopen
 from zipfile import ZipFile
 import secrets
+import requests
+
+# debug onl yin developmwnt
+from django.views import debug
+import sys
+
+from .imagekit_media import ImageMediaLibrary
 
 from cryptography.hazmat.primitives.asymmetric import padding
 import base64
@@ -32,6 +39,7 @@ from .custom_exceptions import (
     SimilarItemHeadingDataError,
     HeaderDataNotFoundError,
     TableNotFoundError,
+    ImageMediaStorageError,
 )
 from django.core.files.base import ContentFile
 from django.db import (
@@ -124,38 +132,38 @@ def exception_handler(func):
             success = True
 
         except ObjectDoesNotExist as e:
-            if e.form_name:
+            if hasattr(e, "form_name") and e.form_name:
                 instance.context[f"{e.form_name}_errors"]["error"] = None
             else:
                 instance.context["db_error"] = f"Object does not exist: {e.__str__()}"
 
             # used for debugging
-            return debug.technical_500_response(request, *sys.exc_info())
+            return debug.technical_500_response(instance.request, *sys.exc_info())
 
         except MultipleObjectsReturned as e:
-            if e.form_name:
+            if hasattr(e, "form_name") and e.form_name:
                 instance.context[f"{e.form_name}_errors"]["error"] = None
             else:
                 instance.context["db_error"] = f"Multiple Objects Found: {e.__str__()}"
 
             # used for debugging
-            return debug.technical_500_response(request, *sys.exc_info())
+            return debug.technical_500_response(instance.request, *sys.exc_info())
 
         except ValidationError as e:
             print(e.__str__())
 
-            if e.form_name:
+            if hasattr(e, "form_name") and e.form_name:
                 instance.context[f"{e.form_name}_errors"]["error"] = None
             else:
                 instance.context["db_error"] = f"Validation Error: {e.__str__()}"
 
             # used for debugging
-            return debug.technical_500_response(request, *sys.exc_info())
+            return debug.technical_500_response(instance.request, *sys.exc_info())
 
         except SuspiciousOperation as e:
             print(e.__str__())
 
-            if e.form_name:
+            if hasattr(e, "form_name") and e.form_name:
                 instance.context[f"{e.form_name}_errors"]["error"] = None
             else:
                 instance.context[
@@ -163,14 +171,14 @@ def exception_handler(func):
                 ] = f"A suspicious operation was detected: {e.__str__()}"
 
             # used for debugging
-            return debug.technical_500_response(request, *sys.exc_info())
+            return debug.technical_500_response(instance.request, *sys.exc_info())
 
         except PermissionDenied:
             print(
                 "Permission Denied: You do not have permission to perform this action."
             )
 
-            if e.form_name:
+            if hasattr(e, "form_name") and e.form_name:
                 instance.context[f"{e.form_name}_errors"]["error"] = None
             else:
                 instance.context[
@@ -178,45 +186,45 @@ def exception_handler(func):
                 ] = "Permission Denied: You do not have permission to perform this action."
 
             # used for debugging
-            return debug.technical_500_response(request, *sys.exc_info())
+            return debug.technical_500_response(instance.request, *sys.exc_info())
 
         except ConnectionError as e:  # add any cache errors
             print(e.__str__())
 
-            if e.form_name:
+            if hasattr(e, "form_name") and e.form_name:
                 instance.context[f"{e.form_name}_errors"]["error"] = None
             else:
                 instance.context["db_error"] = f"Connection Error: {print(e.__str__())}"
 
             # used for debugging
-            return debug.technical_500_response(request, *sys.exc_info())
+            return debug.technical_500_response(instance.request, *sys.exc_info())
 
         except TypeError as e:
             print(e.__str__())
 
-            if e.form_name:
+            if hasattr(e, "form_name") and e.form_name:
                 instance.context[f"{e.form_name}_errors"]["error"] = None
             else:
                 instance.context["db_error"] = f"Invalid Type: {print(e.__str__())}"
 
             # used for debugging
-            return debug.technical_500_response(request, *sys.exc_info())
+            return debug.technical_500_response(instance.request, *sys.exc_info())
 
         except Http404:
             print("HTTP 404: The requested resource was not found.")
 
-            if e.form_name:
+            if hasattr(e, "form_name") and e.form_name:
                 instance.context[f"{e.form_name}_errors"]["error"] = None
             else:
                 instance.context["db_error"] = "The requested resource was not found."
 
             # used for debugging
-            return debug.technical_500_response(request, *sys.exc_info())
+            return debug.technical_500_response(instance.request, *sys.exc_info())
 
         except IntegrityError as e:
             print(e.__str__())
 
-            if e.form_name:
+            if hasattr(e, "form_name") and e.form_name:
                 instance.context[f"{e.form_name}_errors"]["error"] = None
             else:
                 instance.context[
@@ -224,12 +232,12 @@ def exception_handler(func):
                 ] = f"Integrity Error: Unique Constraint Violated ({e.__str__()})"
 
             # used for debugging
-            return debug.technical_500_response(request, *sys.exc_info())
+            return debug.technical_500_response(instance.request, *sys.exc_info())
 
         except DataError as e:
             print(e.__str__())
 
-            if e.form_name:
+            if hasattr(e, "form_name") and e.form_name:
                 instance.context[f"{e.form_name}_errors"]["error"] = None
             else:
                 instance.context[
@@ -237,21 +245,21 @@ def exception_handler(func):
                 ] = f"Data Error: Invalid data types or lengths. ({e.__str__()})"
 
             # used for debugging
-            return debug.technical_500_response(request, *sys.exc_info())
+            return debug.technical_500_response(instance.request, *sys.exc_info())
 
         except DatabaseError as e:
             print(e.__str__())
 
-            if e.form_name:
+            if hasattr(e, "form_name") and e.form_name:
                 instance.context[f"{e.form_name}_errors"]["error"] = None
             else:
                 instance.context["db_error"] = f"Database Error: ({e.__str__()})"
 
             # used for debugging
-            return debug.technical_500_response(request, *sys.exc_info())
+            return debug.technical_500_response(instance.request, *sys.exc_info())
 
         except OperationalError as e:
-            if e.form_name:
+            if hasattr(e, "form_name") and e.form_name:
                 instance.context[f"{e.form_name}_errors"]["error"] = None
             else:
                 instance.context[
@@ -259,13 +267,13 @@ def exception_handler(func):
                 ] = f"Operational Error: Connection problem or timeout. ({e.__str__()})"
 
             # used for debugging
-            return debug.technical_500_response(request, *sys.exc_info())
+            return debug.technical_500_response(instance.request, *sys.exc_info())
 
         except Exception as e:
             print(e.__str__())
 
             # Generic Error
-            if e.form_name:
+            if hasattr(e, "form_name") and e.form_name:
                 instance.context[f"{e.form_name}_errors"]["error"] = None
             else:
                 instance.context[
@@ -273,14 +281,17 @@ def exception_handler(func):
                 ] = f"An unexpected error occurred: {e.__str__()}"
 
             # used for debugging
-            return debug.technical_500_response(request, *sys.exc_info())
+            return debug.technical_500_response(instance.request, *sys.exc_info())
 
         finally:
             if success:
                 instance.context["db_error"] = None
+                return render(
+                    instance.request, instance.home_template, instance.context
+                )
 
-            return render(instance.request, instance.home_template, instance.context)
-            pass
+            else:
+                pass
 
     return wrapper
 
@@ -379,7 +390,7 @@ class IndexView(View):
         self.context["export_form_errors"] = {"has_error": False, "error": None}
 
         # TODO: REMOVE
-        # if cache.get(self.cache_key_header) is not None:      
+        # if cache.get(self.cache_key_header) is not None:
         #     self.context["inspector_header"] = cache.get(self.cache_key_header)
 
         # if self.request.session.get("current_header", "") != "":
@@ -478,7 +489,6 @@ class IndexView(View):
                 self.context["cookie_key"] = None
                 self.context["cookie_data"] = None
                 self.request.session["cookie_is_set"] = False
-                
 
         # Validates the Cookie Save Consent
         if self.request.POST.get("allow_cookies", None) is not None:
@@ -558,7 +568,16 @@ class IndexView(View):
                         user__unique_code=self.request.session.get("user_code")
                     )
 
-                    image = Image.open(image_model.image.path)
+                    response = requests.get(imagekit_url)
+
+                    if response.status_code == 200:
+                        image = Image.open(BytesIO(response.content))
+
+                    else:
+                        raise ImageMediaStorageError(
+                            "Image was Not Found in the Media Storage"
+                        )
+
                     image = image.convert("RGBA")
 
                     draw = ImageDraw.Draw(image)
@@ -587,25 +606,45 @@ class IndexView(View):
                             fill=rgb_values + (int(transparency * 255),),
                         )
 
-                    # Save the modified image to a temporary location
-                    temp_image_path = os.path.join(
-                        settings.MEDIA_ROOT,
-                        f"{self.request.session.get('user_code')}_{get_random_string(8)}.png",
-                    )
-                    image.save(temp_image_path)
+                    _, extension = os.path.splitext(image_model.image_file_name)
+                    extension = extension[1:].upper()
 
-                    # NOTE: This might not be Databsase-agnostic
-                    if self.request.session.get("preview_url", "") != "":
-                        os.remove(
-                            os.path.join(
-                                settings.MEDIA_ROOT,
-                                self.request.session.get("preview_url").split("/")[-1],
-                            )
+                    rendered_image = BytesIO()
+                    image.save(rendered_image, format=extension)
+
+                    # Save the modified image to the preview storage
+
+                    preview_image_storage = ImageMediaLibrary("preview")
+
+                    image_upload_result = preview_image_storage.upload_image(
+                        image_file=rendered_image,
+                        tags=[
+                            self.request.session.get("user_code"),
+                        ],
+                        overwrite_status=True,
+                    )
+
+                    if image_upload_result:
+                        if image_model.preview_image_url != "":
+                            if not preview_image_storage.delete_image(
+                                image_url=image_model.preview_image_url,
+                                image_type="preview",
+                                user_code=self.request.session.get("user_code"),
+                            ):
+                                raise ImageMediaStorageError(
+                                    "The Previous Preview Image Could not be Deleted"
+                                )
+
+                        image_model.preview_image_url = image_upload_result.url
+
+                    else:
+                        raise ImageMediaStorageError(
+                            "Image Could not be Uploaded to the Media Storage"
                         )
 
-                    self.request.session[
-                        "preview_url"
-                    ] = f"/media/{os.path.relpath(temp_image_path, settings.MEDIA_ROOT)}"
+                    image_model.save()
+
+                    self.request.session["preview_url"] = image_model.preview_image_url
 
                 except Exception as e:
                     print("render_preview_url" + e.__str__())
@@ -1127,7 +1166,9 @@ class IndexView(View):
                     instance.position_y = item_form.cleaned_data.get("position_y")
                     instance.font_size = item_form.cleaned_data.get("font_size")
                     instance.color = item_form.cleaned_data.get("color")
-                    instance.font_name = item_form.cleaned_data.get("font_select")  # TODO: match font name in form and actual
+                    instance.font_name = item_form.cleaned_data.get(
+                        "font_select"
+                    )  # TODO: match font name in form and actual
 
                     instance.save()
 
@@ -1207,29 +1248,53 @@ class IndexView(View):
 
             if image_form.is_valid():
                 try:
-                    if self.request.session.get("image_file_name", None) is not None:
-                        ImageModel.objects.get(
-                            image_file_name=self.request.session.get("image_file_name"),
+                    if self.request.session.get("image_file_name") is not None:
+                        filter_instance = ImageModel.objects.filter(
                             user__unique_code=self.request.session.get("user_code"),
-                        ).delete()
+                        )
 
                     instance = ImageModel()
 
-                    instance.image_file_name = self.request.session[
-                        "image_file_name"
-                    ] = self.request.FILES["image"].name
-                    instance.image = self.request.FILES["image"]
-                    instance.user = CustomUser.objects.get(
-                        unique_code=self.request.session.get("user_code")
+                    main_image_storage = ImageMediaLibrary("main")
+
+                    image_upload_result = main_image_storage.upload_image(
+                        image_file=self.request.FILES["image"],
+                        tags=[
+                            self.request.session.get("user_code"),
+                            lambda verified_status: "verified"
+                            if self.request.session.get("is_verified")
+                            else "not verified",
+                        ],
+                        overwrite_status=True,
                     )
 
-                    instance.save()
+                    if image_upload_result:
+                        instance.image_url = image_upload_result.url
+
+                        instance.image_file_name = self.request.session[
+                            "image_file_name"
+                        ] = image_upload_result.name
+
+                    else:
+                        raise ImageMediaStorageError(
+                            "Image Could not be Uploaded to the Media Storage"
+                        )
+
+                    with transaction.atomic():
+                        instance.user = CustomUser.objects.get(
+                            unique_code=self.request.session.get("user_code")
+                        )
+
+                        if filter_instance and filter_instance.exists():
+                            filter_instance.delete()
+
+                        instance.save()
 
                 except Exception as e:
                     print("load_image" + e.__str__())
                     raise
 
-                self.request.session["image_url"] = instance.image.url
+                self.request.session["image_url"] = instance.image_url
                 self.context["image_form"] = image_form
                 self.context["image_status"] = True
 

@@ -94,7 +94,7 @@ class CustomUser(AbstractUser):
 
 
 class DataItemSetModel(models.Model):
-    item_set_id = models.AutoField(primary_key=True)
+    item_set_id = models.BigAutoField(primary_key=True)
 
     item_set_heading = models.CharField(
         max_length=255,
@@ -163,18 +163,22 @@ class DataItemSetModel(models.Model):
 
 
 class ImageModel(models.Model):
-    image_id = models.AutoField(primary_key=True)
+    image_id = models.BigAutoField(primary_key=True)
 
     image_file_name = models.CharField(
         max_length=256,
-        verbose_name="Image Name",
+        verbose_name="Background Image Name",
     )
-    image = models.ImageField(
-        upload_to="DBMedia/",
-        height_field=None,
-        width_field=None,
-        verbose_name="Background Image",
+    
+    image_url = models.TextField(
+        verbose_name="Background Image URL",
     )
+    
+    preview_image_url = models.TextField(
+        verbose_name="Preview Image URL",
+        null=True,
+    )
+    
     export_image_count = models.PositiveIntegerField(
         default=0,
     )
