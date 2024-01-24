@@ -16,6 +16,3 @@ source $(pipenv --venv)/bin/activate
 python manage.py collectstatic --noinput
 
 # Additional build steps, if any
-
-# Deactivate virtual environment
-deactivate
