@@ -2,6 +2,7 @@
 # custom Django ignore
 /cache/
 /media/
+/staticfiles/
 */migrations/
 .vscode
 

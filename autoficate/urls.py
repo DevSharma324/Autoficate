@@ -12,10 +12,12 @@ handler404 = Custom404View
 
 urlpatterns = [
     path(os.environ.get("ADMIN_PATH"), admin.site.urls),
-    path("app/", IndexView.as_view(), name="index"),
+    path("", IndexView.as_view(), name="index"),
     path("signup/", SignupView, name="signup"),
     path("logout/", LogoutView),
 ]
+
+urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

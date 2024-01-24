@@ -1,6 +1,8 @@
 from django.contrib.auth.forms import UserCreationForm
 from django.core.exceptions import ValidationError
 from django import forms
+from django.core.validators import FileExtensionValidator
+
 
 from .models import CustomUser, DataItemSetModel, ImageModel
 
@@ -12,7 +14,14 @@ import os
 class SignUpForm(UserCreationForm):
     class Meta:
         model = CustomUser
-        fields = ["first_name", "last_name", "user_email", "password1", "password2", "allow_promotional"]
+        fields = [
+            "first_name",
+            "last_name",
+            "user_email",
+            "password1",
+            "password2",
+            "allow_promotional",
+        ]
 
     def clean_password2(self):
         # Check that the two password entries match
@@ -69,16 +78,20 @@ class LoginForm(forms.Form):
 
 # Form for Excel file Input
 class ExcelForm(forms.Form):
-    excel_file = (
-        forms.FileField()
-    )  # (widget=forms.TextInput(attrs={'id': 'file-upload'}))
+    excel_file = forms.FileField()
 
 
 # Form for Image file Input
-class ImageForm(forms.ModelForm):
-    class Meta:
-        model = ImageModel
-        fields = ["image"]
+class ImageForm(forms.Form):
+    image = forms.ImageField(
+        label="Upload Image",
+        validators=[
+            FileExtensionValidator(["jpg", "jpeg", "png"]),
+            lambda value: ValidationError("Image size must be no more than 5 MB")
+            if value.size > 5 * 1024 * 1024  # 5 MB
+            else None,
+        ],
+    )
 
 
 def get_available_fonts():

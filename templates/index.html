@@ -72,7 +72,7 @@
         </div>
     {% endif %}
 
-    {% if request.session.user_code is not None and new_user or request.session.user_code is not None and request.session.is_verified %}
+    {% if request.session.user_code is not None and not new_user or request.session.user_code is not None and request.session.is_verified %}
         <div>
             <hr>
             Item Input:
@@ -117,7 +117,10 @@
                 Image Filename: {{ request.session.image_file_name }}<br>
                 Image URL: {{ request.session.image_url }}<br>
                 Image Render URL: {{ request.session.preview_url }}<br>
-                <img style="mix-blend-mode: multiply;" src="{% if request.session.preview_url == '' or request.session.preview_url is None %}{{ request.session.image_url }}{% else %}{{ request.session.preview_url }}{% endif %}" /> <br><br>
+
+                {% if request.session.preview_url or request.session.preview_url %}
+                    <img style="mix-blend-mode: multiply;" src="{% if request.session.preview_url == '' or request.session.preview_url is None %}{{ request.session.image_url }}{% else %}{{ request.session.preview_url }}{% endif %}" /> <br><br>
+                {% endif %}
 
                 {{ image_form.image }} <br>
 

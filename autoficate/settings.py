@@ -29,8 +29,8 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
 ]
 
-if os.environ.get("ALLOWED_HOSTS") is not ".vercel.app":
-    INSTALLED_APPS.append("whitenoise.runserver_nostatic")  # For Local Development
+if os.environ.get("ALLOWED_HOSTS") != ".vercel.app":
+  INSTALLED_APPS.append("whitenoise.runserver_nostatic")  # For Local Development
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -122,6 +122,7 @@ CACHES = {
     }
 }
 
+CSRF_COOKIE_SECURE = True
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.0/howto/static-files/

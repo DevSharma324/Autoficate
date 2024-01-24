@@ -2,7 +2,7 @@ from django.utils import timezone
 from django.contrib.auth.models import BaseUserManager, AbstractUser
 from django.db import models
 from django.utils.crypto import get_random_string
-
+from django.conf import settings
 import os
 
 
@@ -94,7 +94,7 @@ class CustomUser(AbstractUser):
 
 
 class DataItemSetModel(models.Model):
-    item_set_id = models.AutoField(primary_key=True)
+    item_set_id = models.BigAutoField(primary_key=True)
 
     item_set_heading = models.CharField(
         max_length=255,
@@ -139,7 +139,7 @@ class DataItemSetModel(models.Model):
 
     # @staticmethod
     def search_font(font_name):
-        font_path = os.path.join("static", "fonts", f"{font_name}.ttf")
+        font_path = os.path.join(settings.STATIC_ROOT, "fonts", f"{font_name}.ttf")
 
         if os.path.exists(font_path):
             return font_path
@@ -163,18 +163,22 @@ class DataItemSetModel(models.Model):
 
 
 class ImageModel(models.Model):
-    image_id = models.AutoField(primary_key=True)
+    image_id = models.BigAutoField(primary_key=True)
 
     image_file_name = models.CharField(
         max_length=256,
-        verbose_name="Image Name",
+        verbose_name="Background Image Name",
     )
-    image = models.ImageField(
-        upload_to="DBMedia/",
-        height_field=None,
-        width_field=None,
-        verbose_name="Background Image",
+    
+    image_url = models.TextField(
+        verbose_name="Background Image URL",
     )
+    
+    preview_image_url = models.TextField(
+        verbose_name="Preview Image URL",
+        null=True,
+    )
+    
     export_image_count = models.PositiveIntegerField(
         default=0,
     )
