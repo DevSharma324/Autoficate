@@ -110,10 +110,10 @@ def check_time(func):
         )
         return result
 
-    return wrapper()
+    return wrapper
 
 
-def exception_handler(func):
+def page_renderer(func):
     """
     Decorator that handles various exceptions and renders the page with appropriate error information.
 
@@ -298,6 +298,7 @@ def exception_handler(func):
 
 class IndexView(View):
     # Reload the Cache and update the session variables accordingly
+    @check_time
     def reload_cache(self, headers, header_items):
         """Update the Cache for Header items and Header Data. It also Updates the Respective Session Variables"""
 
@@ -555,6 +556,7 @@ class IndexView(View):
                 )
 
     # Render Preview Image
+    @check_time
     def render_preview_url(self):  # TODO: Verify
         """Renders a Single Image Using the First Set of Items for Preview"""
 
@@ -863,6 +865,7 @@ class IndexView(View):
         else:
             raise TableNotFoundError("The Table was Not Found in this Excel Sheet")
 
+    @check_time
     def store_excel_to_model(self, excel_file):
         """"""
 
@@ -960,7 +963,7 @@ class IndexView(View):
         self.request = {}
         self.cache_key_header = ""
 
-    @exception_handler
+    @page_renderer
     def dispatch(self, request, *args, **kwargs):
         try:
             self.request = request
@@ -977,12 +980,14 @@ class IndexView(View):
         return super().dispatch(request, *args, **kwargs)
 
     ## Main Request Handlers ##
-    @exception_handler
+    @page_renderer
     def get(self, request, *args, **kwargs):
         pass
 
-    @exception_handler
+    @page_renderer
     def post(self, request, *args, **kwargs):
+        start_time = time.time()
+
         # Check and Set User Information Status
         if (
             self.request.POST.get("submit_name_signup") is not None
@@ -1424,13 +1429,17 @@ class IndexView(View):
                 # Clean up: Delete the zip file
                 os.unlink(zip_path)
 
-                return response
+                # return response
+
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print(f"\nPOST took {elapsed_time:.6f} seconds to execute.\n")
 
 
 def Custom404View(request, exception=None):
     return render(request, "Custom404.html", status=404)
 
-
+@check_time
 def SignupView(request):
     signup_form_errors = None
     db_errors = None
@@ -1563,7 +1572,7 @@ def SignupView(request):
         {"signup_form": signup_form, "signup_form_errors": signup_form_errors},
     )
 
-
+@check_time
 def LogoutView(request):
     cache.clear()
     logout(request)
