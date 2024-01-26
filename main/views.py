@@ -5,11 +5,14 @@ from io import BytesIO
 from urllib.request import urlopen
 from zipfile import ZipFile
 import secrets
+from functools import wraps
 import requests
 
-# debug onl yin developmwnt
+# TODO: debug only in development
 from django.views import debug
 import sys
+
+from django.core.serializers import serialize
 
 from .imagekit_media import ImageMediaLibrary
 
@@ -113,7 +116,191 @@ def check_time(func):
     return wrapper
 
 
+def exception_handler(func):
+    """
+    Decorator that handles various exceptions and renders appropriate error information.
+    """
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+
+        except ObjectDoesNotExist as e:
+            if hasattr(e, "form_name") and e.form_name:
+                instance.context[f"{e.form_name}_errors"]["error"] = None
+            else:
+                instance.context["db_error"] = f"Object does not exist: {e.__str__()}"
+
+            # used for debugging
+            return debug.technical_500_response(instance.request, *sys.exc_info())
+
+        except MultipleObjectsReturned as e:
+            if hasattr(e, "form_name") and e.form_name:
+                instance.context[f"{e.form_name}_errors"]["error"] = None
+            else:
+                instance.context["db_error"] = f"Multiple Objects Found: {e.__str__()}"
+
+            # used for debugging
+            return debug.technical_500_response(instance.request, *sys.exc_info())
+
+        except ValidationError as e:
+            print(e.__str__())
+
+            if hasattr(e, "form_name") and e.form_name:
+                instance.context[f"{e.form_name}_errors"]["error"] = None
+            else:
+                instance.context["db_error"] = f"Validation Error: {e.__str__()}"
+
+            # used for debugging
+            return debug.technical_500_response(instance.request, *sys.exc_info())
+
+        except SuspiciousOperation as e:
+            print(e.__str__())
+
+            if hasattr(e, "form_name") and e.form_name:
+                instance.context[f"{e.form_name}_errors"]["error"] = None
+            else:
+                instance.context[
+                    "db_error"
+                ] = f"A suspicious operation was detected: {e.__str__()}"
+
+            # used for debugging
+            return debug.technical_500_response(instance.request, *sys.exc_info())
+
+        except PermissionDenied:
+            print(
+                "Permission Denied: You do not have permission to perform this action."
+            )
+
+            if hasattr(e, "form_name") and e.form_name:
+                instance.context[f"{e.form_name}_errors"]["error"] = None
+            else:
+                instance.context[
+                    "db_error"
+                ] = "Permission Denied: You do not have permission to perform this action."
+
+            # used for debugging
+            return debug.technical_500_response(instance.request, *sys.exc_info())
+
+        except ConnectionError as e:  # add any cache errors
+            print(e.__str__())
+
+            if hasattr(e, "form_name") and e.form_name:
+                instance.context[f"{e.form_name}_errors"]["error"] = None
+            else:
+                instance.context["db_error"] = f"Connection Error: {print(e.__str__())}"
+
+            # used for debugging
+            return debug.technical_500_response(instance.request, *sys.exc_info())
+
+        except TypeError as e:
+            print(e.__str__())
+
+            if hasattr(e, "form_name") and e.form_name:
+                instance.context[f"{e.form_name}_errors"]["error"] = None
+            else:
+                instance.context["db_error"] = f"Invalid Type: {print(e.__str__())}"
+
+            # used for debugging
+            return debug.technical_500_response(instance.request, *sys.exc_info())
+
+        except Http404:
+            print("HTTP 404: The requested resource was not found.")
+
+            if hasattr(e, "form_name") and e.form_name:
+                instance.context[f"{e.form_name}_errors"]["error"] = None
+            else:
+                instance.context["db_error"] = "The requested resource was not found."
+
+            # used for debugging
+            return debug.technical_500_response(instance.request, *sys.exc_info())
+
+        except IntegrityError as e:
+            print(e.__str__())
+
+            if hasattr(e, "form_name") and e.form_name:
+                instance.context[f"{e.form_name}_errors"]["error"] = None
+            else:
+                instance.context[
+                    "db_error"
+                ] = f"Integrity Error: Unique Constraint Violated ({e.__str__()})"
+
+            # used for debugging
+            return debug.technical_500_response(instance.request, *sys.exc_info())
+
+        except DataError as e:
+            print(e.__str__())
+
+            if hasattr(e, "form_name") and e.form_name:
+                instance.context[f"{e.form_name}_errors"]["error"] = None
+            else:
+                instance.context[
+                    "db_error"
+                ] = f"Data Error: Invalid data types or lengths. ({e.__str__()})"
+
+            # used for debugging
+            return debug.technical_500_response(instance.request, *sys.exc_info())
+
+        except DatabaseError as e:
+            print(e.__str__())
+
+            if hasattr(e, "form_name") and e.form_name:
+                instance.context[f"{e.form_name}_errors"]["error"] = None
+            else:
+                instance.context["db_error"] = f"Database Error: ({e.__str__()})"
+
+            # used for debugging
+            return debug.technical_500_response(instance.request, *sys.exc_info())
+
+        except OperationalError as e:
+            if hasattr(e, "form_name") and e.form_name:
+                instance.context[f"{e.form_name}_errors"]["error"] = None
+            else:
+                instance.context[
+                    "db_error"
+                ] = f"Operational Error: Connection problem or timeout. ({e.__str__()})"
+
+            # used for debugging
+            return debug.technical_500_response(instance.request, *sys.exc_info())
+
+        except Exception as e:
+            print(e.__str__())
+
+            # Generic Error
+            if hasattr(e, "form_name") and e.form_name:
+                instance.context[f"{e.form_name}_errors"]["error"] = None
+            else:
+                instance.context[
+                    "db_error"
+                ] = f"An unexpected error occurred: {e.__str__()}"
+
+            # used for debugging
+            return debug.technical_500_response(instance.request, *sys.exc_info())
+
+    return wrapper
+
+
 def page_renderer(func):
+    @exception_handler
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        instance = args[0]
+        try:
+            func(*args, **kwargs)
+            return render(
+                instance.request, instance.home_template, instance.context
+            )  # Make sure to return the rendered page
+        except Exception as e:
+            logger.exception("An error occurred during page rendering: %s", str(e))
+            return debug.technical_500_response(
+                instance.request, *sys.exc_info()
+            )  # Make sure to handle exceptions during rendering
+
+    return wrapper
+
+
+def page_renderer_old(func):
     """
     Decorator that handles various exceptions and renders the page with appropriate error information.
 
@@ -465,6 +652,19 @@ class IndexView(View):
     def verify_user_type(self):
         """Updates the user type data in the context dictionary."""
 
+        """
+        TODO:
+        
+        set_test_cookie()¶
+        Sets a test cookie to determine whether the user’s browser supports cookies. Due to the way cookies work, you won’t be able to test this until the user’s next page request. See Setting test cookies below for more information.
+
+        test_cookie_worked()¶
+        Returns either True or False, depending on whether the user’s browser accepted the test cookie. Due to the way cookies work, you’ll have to call set_test_cookie() on a previous, separate page request. See Setting test cookies below for more information.
+
+        delete_test_cookie()¶
+        Deletes the test cookie. Use this to clean up after yourself.
+        """
+
         if self.request.session.get("user_code", "") != "":
             self.context["new_user"] = False
 
@@ -538,17 +738,13 @@ class IndexView(View):
             self.request.session["is_verified"] = False
 
         # reload cache and display headers if possible
-        if (
-            len(cache.get(self.cache_key_header, [])) == 0
-            and self.request.session.get("user_code", "") != ""
+        if not cache.get(self.cache_key_header, []) and self.request.session.get(
+            "user_code", ""
         ):
-            if self.reload_cache(
-                headers=True,
-                header_items=["__all__"],
-            ):
-                self.context["inspector_data"] = cache.get(
-                    self.request.session.get("current_header")
-                )
+            self.reload_cache(headers=True, header_items=["__all__"])
+            self.context["inspector_data"] = cache.get(
+                self.request.session.get("current_header")
+            )
         else:
             if self.request.session.get("current_header") is not None:
                 self.context["inspector_data"] = cache.get(
@@ -963,7 +1159,7 @@ class IndexView(View):
         self.request = {}
         self.cache_key_header = ""
 
-    @page_renderer
+    @exception_handler
     def dispatch(self, request, *args, **kwargs):
         try:
             self.request = request
@@ -1087,10 +1283,12 @@ class IndexView(View):
 
                     instance.save()
 
+                    self.request.session["current_header"] = instance.item_set_heading
                     self.context["item_form"] = ItemForm(
                         instance=instance,
                     )
                 else:
+                    self.request.session["current_header"] = filter_instance.first().item_set_heading
                     self.context["item_form"] = ItemForm(
                         instance=filter_instance.first(),
                     )
@@ -1106,7 +1304,7 @@ class IndexView(View):
 
             if item_form.is_valid() and self.request.session.get("user_code", "") != "":
                 try:
-                    # because the Empty header Data is stored as "[]"
+                    # because the Empty header Data is stored as "[]" in db
                     if len(cache.get(self.cache_key_header, [])) == 0:
                         instance = DataItemSetModel.objects.filter(
                             item_set_heading="",
@@ -1182,9 +1380,10 @@ class IndexView(View):
                     "item_heading"
                 )
 
+                # TODO: check if all the header_items should be reloaded
                 self.reload_cache(
                     headers=True,
-                    header_items=["__all__"],
+                    header_items=instance.item_set_heading,
                 )
 
                 self.context["item_form"] = ItemForm(
@@ -1439,6 +1638,7 @@ class IndexView(View):
 def Custom404View(request, exception=None):
     return render(request, "Custom404.html", status=404)
 
+
 @check_time
 def SignupView(request):
     signup_form_errors = None
@@ -1571,6 +1771,7 @@ def SignupView(request):
         "signup.html",
         {"signup_form": signup_form, "signup_form_errors": signup_form_errors},
     )
+
 
 @check_time
 def LogoutView(request):
