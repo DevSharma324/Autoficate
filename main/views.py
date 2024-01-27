@@ -1329,15 +1329,11 @@ class IndexView(View):
 
         return super().dispatch(request, *args, **kwargs)
 
-    from silk.profiling.profiler import silk_profile
-
     ## Main Request Handlers ##
-    @silk_profile(name="GET Profile")
     @page_renderer
     def get(self, request, *args, **kwargs):
         pass
 
-    @silk_profile(name="POST Profile")
     @page_renderer
     def post(self, request, *args, **kwargs):
         start_time = time.time()

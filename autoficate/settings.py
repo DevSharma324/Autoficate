@@ -33,8 +33,6 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "debug_toolbar",
-    "silk",
 ]
 
 if os.environ.get("ALLOWED_HOSTS") != ".vercel.app":
@@ -53,12 +51,6 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
-]
-
-SILKY_PYTHON_PROFILER = True
-
-INTERNAL_IPS = [
-    "127.0.0.1",
 ]
 
 ROOT_URLCONF = "autoficate.urls"
@@ -84,13 +76,6 @@ WSGI_APPLICATION = "autoficate.wsgi.app"
 
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
-
-# DATABASES = {
-#     "default": {
-#         "ENGINE": "django.db.backends.sqlite3",
-#         "NAME": BASE_DIR / "db.sqlite3",
-#     }
-# }
 
 DATABASES = {
     "default": {
@@ -156,7 +141,6 @@ SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
 SESSION_CACHE_ALIAS = "session"
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 14  # 2 weeks
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
-SESSION_COOKIE_AGE = 60 * 60 * 24 * 14  # 2 weeks
 SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_HTTPONLY = True
 
