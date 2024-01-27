@@ -3,6 +3,16 @@ from django.contrib.auth.models import BaseUserManager, AbstractUser
 from django.db import models
 from django.utils.crypto import get_random_string
 from django.conf import settings
+from django.db import models
+from django.core.cache import cache
+from django.core.serializers import serialize
+from django.core.exceptions import ObjectDoesNotExist
+from django.utils import timezone
+import ast
+import os
+from django.conf import settings
+
+
 import os
 
 
@@ -92,9 +102,54 @@ class CustomUser(AbstractUser):
     class Meta:
         verbose_name_plural = "Custom Users"
 
+class DataItemSetModelManager(models.Manager):
+    def get_header_cache_key(self, user_code):
+        return f"header_cache_{user_code}"
+
+    def get_item_cache_key(self, item_set_heading):
+        return f"item_cache_{item_set_heading}"
+
+    def reload_header_cache(self, user_code):
+        try:
+            inspector_header = list(
+                self.filter(user_code=user_code).values_list("item_set_heading", flat=True)
+            )
+
+            cache.set(self.get_header_cache_key(user_code), inspector_header)
+
+        except ObjectDoesNotExist as e:
+            print(f"reload_header_cache: {e}")
+
+    def reload_item_cache(self, item_set_heading):
+        try:
+            inspector_data = ast.literal_eval(
+                self.get(item_set_heading=item_set_heading).item_set
+            )
+
+            cache.set(self.get_item_cache_key(item_set_heading), inspector_data)
+
+        except ObjectDoesNotExist as e:
+            print(f"reload_item_cache: {e}")
+
+    def reload_cache(self, user_code, headers, header_items, clear_cache=False):
+        if headers:
+            if clear_cache:
+                cache.delete(self.get_header_cache_key(user_code))
+            self.reload_header_cache(user_code)
+            return
+
+        if header_items is None:
+            header_items = cache.get(self.get_header_cache_key(user_code))
+
+        for item in header_items:
+            if clear_cache:
+                cache.delete(self.get_item_cache_key(item))
+            self.reload_item_cache(item)
 
 class DataItemSetModel(models.Model):
     item_set_id = models.BigAutoField(primary_key=True)
+
+    # objects = DataItemSetModelManager()
 
     item_set_heading = models.CharField(
         max_length=255,
@@ -147,8 +202,12 @@ class DataItemSetModel(models.Model):
             return None
 
     def save(self, *args, **kwargs):
+        # Clear cache on save
         if not self.created:
             self.created = timezone.now()
+
+        # cache.delete(self.objects.get_header_cache_key(self.user_code))
+        # cache.delete(self.objects.get_item_cache_key(self.item_set_heading))
 
         super().save(*args, **kwargs)
 
@@ -185,9 +244,10 @@ class ImageModel(models.Model):
     exports = models.PositiveIntegerField(
         default=0,
     )
-    user = models.ForeignKey(
+    user = models.OneToOneField(
         CustomUser,
         on_delete=models.CASCADE,
+        unique=True,
     )
 
     def delete(self, *args, **kwargs):

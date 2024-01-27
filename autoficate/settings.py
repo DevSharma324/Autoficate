@@ -30,7 +30,8 @@ INSTALLED_APPS = [
 ]
 
 if os.environ.get("ALLOWED_HOSTS") != ".vercel.app":
-  INSTALLED_APPS.append("whitenoise.runserver_nostatic")  # For Local Development
+    INSTALLED_APPS.append("whitenoise.runserver_nostatic")  # For Local Development
+    print("Installed whitenoise_nostatic\n")
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -103,24 +104,42 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# Cache settings
+REDIS_CACHE_PASSWORD = os.getenv("REDIS_CACHE_PASSWORD", "")
+REDIS_SESSION_PASSWORD = os.getenv("REDIS_SESSION_PASSWORD", "")
+
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": f"redis://default:{REDIS_CACHE_PASSWORD}@redis-18617.c55.eu-central-1-1.ec2.cloud.redislabs.com:18617/0",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "parser_class": "redis.connection.HiredisParser",
+        },
+    },
+    "session": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": f"redis://default:{REDIS_SESSION_PASSWORD}@redis-14112.c250.eu-central-1-1.ec2.cloud.redislabs.com:14112/0",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "parser_class": "redis.connection.HiredisParser",
+        },
+    },
+}
+
 AUTH_USER_MODEL = "main.CustomUser"
 
+# included just for safety
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media/")
 
 # Session settings
-SESSION_ENGINE = "django.contrib.sessions.backends.db"
+SESSION_REDIS_PREFIX = "session"
+SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
+SESSION_CACHE_ALIAS = "session"
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_HTTPONLY = True
-
-# Cache settings
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
-        "LOCATION": "CacheTable",
-    }
-}
 
 CSRF_COOKIE_SECURE = True
 

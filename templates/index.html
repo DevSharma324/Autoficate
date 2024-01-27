@@ -148,12 +148,15 @@
             Inspector Panel:
             <form method="post">
                 {% csrf_token %}
-                {% if inspector_data is not None %}
+                {% if inspector_data %}
                     {% for item in inspector_data %}
                         <input type="text" name="inspector_data_item" required value="{{ item }}">&nbsp;&nbsp;
                         <button type="button" name="button" value="inspector_data_item_remove">-</button><br>
                     {% endfor %}
-                    
+                {% endif %}
+
+                {% if not inspector_data %}
+                    No Data Available
                 {% endif %}
                 <br><button type="buttom" name="button" value="inspector_data_item_add">+</button>&nbsp;&nbsp;
                 
@@ -163,7 +166,6 @@
                 {% endif %}
             </form>
         </div>
-
         <div>
             <hr>
             Export:

@@ -1,31 +1,26 @@
 import ast
+import base64
 import os
+import secrets
+import sys
+import tempfile
 import time
-from io import BytesIO
+from functools import wraps
+from io import BytesIO, BufferedReader
 from urllib.request import urlopen
 from zipfile import ZipFile
-import secrets
-import requests
-
-# debug onl yin developmwnt
-from django.views import debug
-import sys
-
-from .imagekit_media import ImageMediaLibrary
-
-from cryptography.hazmat.primitives.asymmetric import padding
-import base64
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import serialization, padding
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 import openpyxl
 import pandas as pd
+import requests
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import padding, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import Group
 from django.core.cache import cache
-
 from django.core.exceptions import (
     MultipleObjectsReturned,
     ObjectDoesNotExist,
@@ -33,15 +28,9 @@ from django.core.exceptions import (
     SuspiciousOperation,
     ValidationError,
 )
-from .custom_exceptions import (
-    SessionValuesNotFoundError,
-    SimilarItemHeadingError,
-    SimilarItemHeadingDataError,
-    HeaderDataNotFoundError,
-    TableNotFoundError,
-    ImageMediaStorageError,
-)
+from django.core.files import File
 from django.core.files.base import ContentFile
+from django.core.serializers import serialize
 from django.db import (
     DatabaseError,
     DataError,
@@ -54,39 +43,28 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.utils.crypto import get_random_string
 from django.utils.encoding import smart_str
-from django.views import View
+
+# TODO: debug only in development
+from django.views import View, debug
+from imagekitio import ImageKit
+from imagekitio.models.ListAndSearchFileRequestOptions import (
+    ListAndSearchFileRequestOptions,
+)
+from imagekitio.models.results.UploadFileResult import UploadFileResult
+from imagekitio.models.UploadFileRequestOptions import UploadFileRequestOptions
 from PIL import Image, ImageColor, ImageDraw, ImageFont
 from reportlab.lib.colors import Color
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
-
-import ast
-import os
-import time
-from io import BytesIO
-from urllib.request import urlopen
-from zipfile import ZipFile
-
-import openpyxl
-import pandas as pd
-from django.conf import settings
-from django.contrib.auth import authenticate, login, logout
-from django.contrib.auth.models import Group
-from django.core.cache import cache
-from django.core.exceptions import ValidationError
-from django.core.files.base import ContentFile
-from django.db import DatabaseError, DataError, IntegrityError, OperationalError
-from django.http import HttpResponse, HttpResponseRedirect
-from django.shortcuts import redirect, render
-from django.utils import timezone
-from django.utils.crypto import get_random_string
-from django.utils.encoding import smart_str
-from PIL import Image, ImageColor, ImageDraw, ImageFont
-from reportlab.lib.colors import Color
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
-
+from .custom_exceptions import (
+    HeaderDataNotFoundError,
+    ImageMediaStorageError,
+    SessionValuesNotFoundError,
+    SimilarItemHeadingDataError,
+    SimilarItemHeadingError,
+    TableNotFoundError,
+)
 from .forms import (
     ExcelForm,
     ExportForm,
@@ -96,6 +74,7 @@ from .forms import (
     NameSignUpForm,
     SignUpForm,
 )
+
 from .models import CustomUser, DataItemSetModel, ImageModel
 
 
@@ -110,10 +89,219 @@ def check_time(func):
         )
         return result
 
-    return wrapper()
+    return wrapper
 
 
-def exception_handler(func):
+def exception_handler_old(func):
+    """
+    Decorator that handles various exceptions and renders appropriate error information.
+    """
+
+    @page_renderer
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        instance = kwargs.get("self")
+        try:
+            return func(*args, **kwargs)
+
+        except ObjectDoesNotExist as e:
+            if hasattr(e, "form_name") and e.form_name:
+                instance.context[f"{e.form_name}_errors"]["error"] = None
+            else:
+                instance.context["db_error"] = f"Object does not exist: {e.__str__()}"
+
+            # used for debugging
+            return debug.technical_500_response(instance.request, *sys.exc_info())
+
+        except MultipleObjectsReturned as e:
+            if hasattr(e, "form_name") and e.form_name:
+                instance.context[f"{e.form_name}_errors"]["error"] = None
+            else:
+                instance.context["db_error"] = f"Multiple Objects Found: {e.__str__()}"
+
+            # used for debugging
+            return debug.technical_500_response(instance.request, *sys.exc_info())
+
+        except ValidationError as e:
+            print(e.__str__())
+
+            if hasattr(e, "form_name") and e.form_name:
+                instance.context[f"{e.form_name}_errors"]["error"] = None
+            else:
+                instance.context["db_error"] = f"Validation Error: {e.__str__()}"
+
+            # used for debugging
+            return debug.technical_500_response(instance.request, *sys.exc_info())
+
+        except SuspiciousOperation as e:
+            print(e.__str__())
+
+            if hasattr(e, "form_name") and e.form_name:
+                instance.context[f"{e.form_name}_errors"]["error"] = None
+            else:
+                instance.context[
+                    "db_error"
+                ] = f"A suspicious operation was detected: {e.__str__()}"
+
+            # used for debugging
+            return debug.technical_500_response(instance.request, *sys.exc_info())
+
+        except PermissionDenied:
+            print(
+                "Permission Denied: You do not have permission to perform this action."
+            )
+
+            if hasattr(e, "form_name") and e.form_name:
+                instance.context[f"{e.form_name}_errors"]["error"] = None
+            else:
+                instance.context[
+                    "db_error"
+                ] = "Permission Denied: You do not have permission to perform this action."
+
+            # used for debugging
+            return debug.technical_500_response(instance.request, *sys.exc_info())
+
+        except ConnectionError as e:  # add any cache errors
+            print(e.__str__())
+
+            if hasattr(e, "form_name") and e.form_name:
+                instance.context[f"{e.form_name}_errors"]["error"] = None
+            else:
+                instance.context["db_error"] = f"Connection Error: {print(e.__str__())}"
+
+            # used for debugging
+            return debug.technical_500_response(instance.request, *sys.exc_info())
+
+        except TypeError as e:
+            print(e.__str__())
+
+            if hasattr(e, "form_name") and e.form_name:
+                instance.context[f"{e.form_name}_errors"]["error"] = None
+            else:
+                instance.context["db_error"] = f"Invalid Type: {print(e.__str__())}"
+
+            # used for debugging
+            return debug.technical_500_response(instance.request, *sys.exc_info())
+
+        except Http404:
+            print("HTTP 404: The requested resource was not found.")
+
+            if hasattr(e, "form_name") and e.form_name:
+                instance.context[f"{e.form_name}_errors"]["error"] = None
+            else:
+                instance.context["db_error"] = "The requested resource was not found."
+
+            # used for debugging
+            return debug.technical_500_response(instance.request, *sys.exc_info())
+
+        except IntegrityError as e:
+            print(e.__str__())
+
+            if hasattr(e, "form_name") and e.form_name:
+                instance.context[f"{e.form_name}_errors"]["error"] = None
+            else:
+                instance.context[
+                    "db_error"
+                ] = f"Integrity Error: Unique Constraint Violated ({e.__str__()})"
+
+            # used for debugging
+            return debug.technical_500_response(instance.request, *sys.exc_info())
+
+        except DataError as e:
+            print(e.__str__())
+
+            if hasattr(e, "form_name") and e.form_name:
+                instance.context[f"{e.form_name}_errors"]["error"] = None
+            else:
+                instance.context[
+                    "db_error"
+                ] = f"Data Error: Invalid data types or lengths. ({e.__str__()})"
+
+            # used for debugging
+            return debug.technical_500_response(instance.request, *sys.exc_info())
+
+        except DatabaseError as e:
+            print(e.__str__())
+
+            if hasattr(e, "form_name") and e.form_name:
+                instance.context[f"{e.form_name}_errors"]["error"] = None
+            else:
+                instance.context["db_error"] = f"Database Error: ({e.__str__()})"
+
+            # used for debugging
+            return debug.technical_500_response(instance.request, *sys.exc_info())
+
+        except OperationalError as e:
+            if hasattr(e, "form_name") and e.form_name:
+                instance.context[f"{e.form_name}_errors"]["error"] = None
+            else:
+                instance.context[
+                    "db_error"
+                ] = f"Operational Error: Connection problem or timeout. ({e.__str__()})"
+
+            # used for debugging
+            return debug.technical_500_response(instance.request, *sys.exc_info())
+
+        except Exception as e:
+            print(e.__str__())
+
+            # Generic Error
+            if hasattr(e, "form_name") and e.form_name:
+                instance.context[f"{e.form_name}_errors"]["error"] = None
+            else:
+                instance.context[
+                    "db_error"
+                ] = f"An unexpected error occurred: {e.__str__()}"
+
+            # used for debugging
+            return debug.technical_500_response(instance.request, *sys.exc_info())
+
+    return wrapper
+
+
+def exception_handler_new(func):
+    """
+    Decorator that handles various exceptions and populates db_error with exception data.
+    """
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        instance = kwargs.get("self")  # Try to get self from kwargs
+        if instance is None and args:
+            instance = args[0]  # try to get it from args
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            instance.context["db_error"] = str(e)
+
+            if settings.DEBUG:
+                return debug.technical_500_response(instance.request, *sys.exc_info())
+
+    return wrapper
+
+
+def page_renderer(func):
+    """
+    Decorator that renders the page after successful execution.
+    """
+
+    @exception_handler_new
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        instance = args[0]
+        func(*args, **kwargs)
+        return render(instance.request, instance.home_template, instance.context)
+
+    return wrapper
+
+
+# Main Request Handlers
+@page_renderer
+def get(self, request, *args, **kwargs):
+    pass
+
+
+def page_renderer_old(func):
     """
     Decorator that handles various exceptions and renders the page with appropriate error information.
 
@@ -298,6 +486,7 @@ def exception_handler(func):
 
 class IndexView(View):
     # Reload the Cache and update the session variables accordingly
+    @check_time
     def reload_cache(self, headers, header_items):
         """Update the Cache for Header items and Header Data. It also Updates the Respective Session Variables"""
 
@@ -329,11 +518,14 @@ class IndexView(View):
                     inspector_data_buffer[item] = inspector_data
 
                 for item in header_items:
-                    cache.set(item, inspector_data_buffer[item])
+                    cache.set(
+                        f"{self.request.session.get('user_code')}-{item}",
+                        inspector_data_buffer[item],
+                    )
 
                 if self.request.session.get("current_header", "") != "":
                     self.context["inspector_data"] = cache.get(
-                        self.request.session.get("current_header")
+                        f"{self.request.session.get('user_code')}-{self.request.session.get('current_header')}"
                     )
 
             if headers:
@@ -434,7 +626,7 @@ class IndexView(View):
                 self.context["item_form"] = ItemForm()
 
             except Exception as e:
-                print("init_context" + e.__str__())
+                print("init_context: " + e.__str__())
                 raise
 
         else:
@@ -460,9 +652,118 @@ class IndexView(View):
 
         self.context["export_form"] = ExportForm()
 
-    # Update the user type
     def verify_user_type(self):
+        user_code = self.request.session.get("user_code", "")
+        cookie_key = self.cookie_key
+
+        # Set a test cookie to determine browser cookie support
+        self.request.session.set_test_cookie()
+
+        # Check if test cookie is supported
+        if self.request.session.test_cookie_worked():
+            # Update context for existing user
+            if user_code:
+                self.context["new_user"] = False
+                self.cache_key_header = f"{user_code}-db_cache_headers"
+
+                # Set cookie if consent given and not already set
+                cookie_consent = self.request.POST.get("allow_cookies")
+                if (
+                    cookie_consent is not None
+                    and cookie_consent == "true"
+                    and not self.request.session.get("cookie_is_set")
+                ):
+                    self.context.update(
+                        {
+                            "set_cookie": True,
+                            "cookie_key": cookie_key,
+                            "cookie_data": self.encrypted_cookie_data(),
+                            "cookie_data_temp": self.decrypt_cookie_data(
+                                self.context.get("cookie_data")
+                            ),
+                        }
+                    )
+                    self.request.session["cookie_is_set"] = True
+
+                # Clear cookie if consent not given
+                elif cookie_consent == "false" and self.request.session.get(
+                    "cookie_is_set"
+                ):
+                    self.context.update(
+                        {
+                            "set_cookie": False,
+                            "cookie_key": None,
+                            "cookie_data": None,
+                        }
+                    )
+                    self.request.session["cookie_is_set"] = False
+
+            # Validate and process stored cookie
+            if (
+                not self.request.session.get("cookie_is_set")
+                and cookie_key in self.request.COOKIES
+            ):
+                cookie_data = self.decrypt_cookie_data(
+                    self.request.COOKIES.get(cookie_key)
+                )
+                if (
+                    cookie_data
+                    and CustomUser.objects.filter(unique_code=cookie_data).exists()
+                ):
+                    self.request.session["user_code"] = cookie_data
+                    self.context["new_user"] = False
+                else:
+                    self.context.update(
+                        {
+                            "new_user": True,
+                            "name_signup_form": NameSignUpForm(),
+                        }
+                    )
+                    self.request.session["cookie_is_set"] = None
+
+            # Initialize name_signup_form if needed
+            else:
+                self.context["name_signup_form"] = NameSignUpForm()
+
+            # Check authentication status and cache data
+            self.request.session[
+                "is_verified"
+            ] = self.request.user.is_authenticated and isinstance(
+                self.request.user, CustomUser
+            )
+            if not cache.get(self.cache_key_header, []) and user_code:
+                self.reload_cache(headers=True, header_items=["__all__"])
+                self.context["inspector_data"] = cache.get(
+                    f"{user_code}-{self.request.session.get('current_header')}"
+                )
+            elif self.request.session.get("current_header") is not None:
+                self.context["inspector_data"] = cache.get(
+                    f"{user_code}-{self.request.session.get('current_header')}"
+                )
+
+        else:
+            # Test cookie not supported, handle accordingly (e.g., show message or redirect)
+            print("Cookie to access Disabled.")
+
+        # Clean up test cookie
+        self.request.session.delete_test_cookie()
+
+    # Update the user type
+    def verify_user_type_old(self):
         """Updates the user type data in the context dictionary."""
+
+        """
+        TODO:
+        
+        set_test_cookie()¶
+        Sets a test cookie to determine whether the user's browser supports cookies. Due to the way cookies work, you won’t be able to test this until the user’s next page request. See Setting test cookies below for more information.
+
+        test_cookie_worked()¶
+        Returns either True or False, depending on whether the user's browser accepted the test cookie. Due to the way cookies work, you’ll have to call set_test_cookie() on a previous, separate page request. See Setting test cookies below for more information.
+
+        delete_test_cookie()¶
+        Deletes the test cookie. Use this to clean up after yourself.
+        """
 
         if self.request.session.get("user_code", "") != "":
             self.context["new_user"] = False
@@ -537,24 +838,21 @@ class IndexView(View):
             self.request.session["is_verified"] = False
 
         # reload cache and display headers if possible
-        if (
-            len(cache.get(self.cache_key_header, [])) == 0
-            and self.request.session.get("user_code", "") != ""
+        if not cache.get(self.cache_key_header, []) and self.request.session.get(
+            "user_code", ""
         ):
-            if self.reload_cache(
-                headers=True,
-                header_items=["__all__"],
-            ):
-                self.context["inspector_data"] = cache.get(
-                    self.request.session.get("current_header")
-                )
+            self.reload_cache(headers=True, header_items=["__all__"])
+            self.context["inspector_data"] = cache.get(
+                f"{self.request.session.get('user_code')}-{self.request.session.get('current_header')}"
+            )
         else:
             if self.request.session.get("current_header") is not None:
                 self.context["inspector_data"] = cache.get(
-                    self.request.session.get("current_header")
+                    f"{self.request.session.get('user_code')}-{self.request.session.get('current_header')}"
                 )
 
     # Render Preview Image
+    @check_time
     def render_preview_url(self):  # TODO: Verify
         """Renders a Single Image Using the First Set of Items for Preview"""
 
@@ -568,7 +866,9 @@ class IndexView(View):
                         user__unique_code=self.request.session.get("user_code")
                     )
 
-                    response = requests.get(imagekit_url)
+                    response = requests.get(image_model.image_url)
+
+                    image = None
 
                     if response.status_code == 200:
                         image = Image.open(BytesIO(response.content))
@@ -612,32 +912,84 @@ class IndexView(View):
                     rendered_image = BytesIO()
                     image.save(rendered_image, format=extension)
 
-                    # Save the modified image to the preview storage
+                    try:
+                        # Save the modified image to the preview storage
 
-                    preview_image_storage = ImageMediaLibrary("preview")
+                        imagekit = ImageKit(
+                            public_key=os.getenv("IMAGEKIT_PUBLIC_KEY"),
+                            private_key=os.getenv("IMAGEKIT_PRIVATE_KEY"),
+                            url_endpoint=os.getenv("IMAGEKIT_PREVIEW_ENDPOINT"),
+                        )
 
-                    image_upload_result = preview_image_storage.upload_image(
-                        image_file=rendered_image,
-                        tags=[
-                            self.request.session.get("user_code"),
-                        ],
-                        overwrite_status=True,
-                    )
+                        options = UploadFileRequestOptions(
+                            tags=[
+                                self.request.session.get("user_code"),
+                            ],
+                            is_private_file=False,
+                            response_fields=[
+                                "tags",
+                                "custom_coordinates",
+                                "is_private_file",
+                                "embedded_metadata",
+                                "custom_metadata",
+                            ],
+                            overwrite_file=True,
+                            folder="/preview/",
+                        )
 
-                    if image_upload_result:
-                        if image_model.preview_image_url != "":
-                            if not preview_image_storage.delete_image(
-                                image_url=image_model.preview_image_url,
-                                image_type="preview",
-                                user_code=self.request.session.get("user_code"),
-                            ):
-                                raise ImageMediaStorageError(
-                                    "The Previous Preview Image Could not be Deleted"
-                                )
+                        if image_model.image_file_name is None:
+                            image_file_name = self.request.FILES.get("image").name
+                        else:
+                            image_file_name = image_model.image_file_name
 
-                        image_model.preview_image_url = image_upload_result.url
+                        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+                            temp_file.write(rendered_image.read())
 
-                    else:
+                        # IDK why but file= needs open()'s return object
+                        image_upload_result = imagekit.upload(
+                            file=open(temp_file.name, "rb"),  # required
+                            file_name=image_file_name,  # required
+                            options=options,
+                        )
+
+                        # Delete the temporary file
+                        os.unlink(temp_file.name)
+
+                        # Print that uploaded file's ID
+                        print(image_upload_result.url)
+
+                        if image_upload_result:
+                            if image_model.preview_image_url != "":
+                                try:
+                                    options = ListAndSearchFileRequestOptions(
+                                        tags=self.request.session.get("user_code"),
+                                        path="preview",
+                                    )
+
+                                    image_id = (
+                                        imagekit.list_files(options=options)
+                                        .list[0]
+                                        .file_id
+                                    )
+
+                                    result = imagekit.delete_file(file_id=image_id)
+
+                                    if result.response_metadata.http_status_code != 204:
+                                        raise ImageMediaStorageError(
+                                            "The Previous Preview Image Could not be Deleted"
+                                        )
+
+                                except Exception as e:
+                                    print(f"Error during image upload: {e}")
+                                    raise
+
+                            image_model.preview_image_url = image_upload_result.url
+
+                        else:
+                            print(e)
+                            raise
+
+                    except Exception as e:
                         raise ImageMediaStorageError(
                             "Image Could not be Uploaded to the Media Storage"
                         )
@@ -647,7 +999,7 @@ class IndexView(View):
                     self.request.session["preview_url"] = image_model.preview_image_url
 
                 except Exception as e:
-                    print("render_preview_url" + e.__str__())
+                    print("render_preview_url: " + e.__str__())
                     raise
 
             else:
@@ -863,6 +1215,7 @@ class IndexView(View):
         else:
             raise TableNotFoundError("The Table was Not Found in this Excel Sheet")
 
+    @check_time
     def store_excel_to_model(self, excel_file):
         """"""
 
@@ -960,7 +1313,7 @@ class IndexView(View):
         self.request = {}
         self.cache_key_header = ""
 
-    @exception_handler
+    @exception_handler_new
     def dispatch(self, request, *args, **kwargs):
         try:
             self.request = request
@@ -976,13 +1329,19 @@ class IndexView(View):
 
         return super().dispatch(request, *args, **kwargs)
 
+    from silk.profiling.profiler import silk_profile
+
     ## Main Request Handlers ##
-    @exception_handler
+    @silk_profile(name="GET Profile")
+    @page_renderer
     def get(self, request, *args, **kwargs):
         pass
 
-    @exception_handler
+    @silk_profile(name="POST Profile")
+    @page_renderer
     def post(self, request, *args, **kwargs):
+        start_time = time.time()
+
         # Check and Set User Information Status
         if (
             self.request.POST.get("submit_name_signup") is not None
@@ -1082,10 +1441,14 @@ class IndexView(View):
 
                     instance.save()
 
+                    self.request.session["current_header"] = instance.item_set_heading
                     self.context["item_form"] = ItemForm(
                         instance=instance,
                     )
                 else:
+                    self.request.session[
+                        "current_header"
+                    ] = filter_instance.first().item_set_heading
                     self.context["item_form"] = ItemForm(
                         instance=filter_instance.first(),
                     )
@@ -1101,7 +1464,7 @@ class IndexView(View):
 
             if item_form.is_valid() and self.request.session.get("user_code", "") != "":
                 try:
-                    # because the Empty header Data is stored as "[]"
+                    # because the Empty header Data is stored as "[]" in db
                     if len(cache.get(self.cache_key_header, [])) == 0:
                         instance = DataItemSetModel.objects.filter(
                             item_set_heading="",
@@ -1119,7 +1482,7 @@ class IndexView(View):
                         )
 
                 except ObjectDoesNotExist as e:
-                    print("update_item" + e.__str__())
+                    print("update_item: " + e.__str__())
 
                     try:
                         if self.request.session.get("current_header", "") != "":
@@ -1151,13 +1514,7 @@ class IndexView(View):
                     except ObjectDoesNotExist as e:
                         print("update_item" + "Everything Empty")
                         raise HeaderDataNotFoundError("The Current Header is Missing")
-                    """ if DataItemSetModel.objects.filter(
-                        user_code=self.request.session.get("user_code"),
-                        item_set_heading=item_form.cleaned_data.get("item_heading"),
-                    ).exists():
-                        raise SimilarItemHeadingError(
-                            "The Entered Item Heading already Exists in the Database"
-                        ) """
+
                 with transaction.atomic():
                     instance.item_set_heading = item_form.cleaned_data.get(
                         "item_heading"
@@ -1177,9 +1534,10 @@ class IndexView(View):
                     "item_heading"
                 )
 
+                # TODO: check if all the header_items should be reloaded
                 self.reload_cache(
                     headers=True,
-                    header_items=["__all__"],
+                    header_items=instance.item_set_heading,
                 )
 
                 self.context["item_form"] = ItemForm(
@@ -1227,7 +1585,7 @@ class IndexView(View):
 
                 if self.request.session.get("current_header", "") != "":
                     self.context["inspector_data"] = cache.get(
-                        self.request.session.get("current_header")
+                        f"{self.request.session.get('user_code')}-{self.request.session.get('current_header')}"
                     )
 
                 self.render_preview_url()
@@ -1248,50 +1606,119 @@ class IndexView(View):
 
             if image_form.is_valid():
                 try:
-                    if self.request.session.get("image_file_name") is not None:
-                        filter_instance = ImageModel.objects.filter(
-                            user__unique_code=self.request.session.get("user_code"),
-                        )
+                    image_uploaded = False
+
+                    filter_instance = ImageModel.objects.filter(
+                        user__unique_code=self.request.session.get("user_code"),
+                    )
 
                     instance = ImageModel()
 
-                    main_image_storage = ImageMediaLibrary("main")
-
-                    image_upload_result = main_image_storage.upload_image(
-                        image_file=self.request.FILES["image"],
-                        tags=[
-                            self.request.session.get("user_code"),
-                            lambda verified_status: "verified"
-                            if self.request.session.get("is_verified")
-                            else "not verified",
-                        ],
-                        overwrite_status=True,
-                    )
-
-                    if image_upload_result:
-                        instance.image_url = image_upload_result.url
-
-                        instance.image_file_name = self.request.session[
-                            "image_file_name"
-                        ] = image_upload_result.name
-
-                    else:
-                        raise ImageMediaStorageError(
-                            "Image Could not be Uploaded to the Media Storage"
+                    try:
+                        imagekit = ImageKit(
+                            public_key=os.getenv("IMAGEKIT_PUBLIC_KEY"),
+                            private_key=os.getenv("IMAGEKIT_PRIVATE_KEY"),
+                            url_endpoint=os.getenv("IMAGEKIT_MAIN_ENDPOINT"),
                         )
+
+                        options = UploadFileRequestOptions(
+                            tags=[
+                                self.request.session.get("user_code"),
+                                lambda verified_status: "verified"
+                                if self.request.session.get("is_verified")
+                                else "not verified",
+                            ],
+                            is_private_file=False,
+                            response_fields=[
+                                "tags",
+                                "custom_coordinates",
+                                "is_private_file",
+                                "embedded_metadata",
+                                "custom_metadata",
+                            ],
+                            overwrite_file=True,
+                            folder="/main/",
+                        )
+
+                        image_file = self.request.FILES["image"]
+
+                        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+                            temp_file.write(image_file.read())
+
+                        # IDK why but file= needs open()'s return object
+                        image_upload_result = imagekit.upload(
+                            file=open(temp_file.name, "rb"),  # required
+                            file_name=image_file.name,  # required
+                            options=options,
+                        )
+
+                        # Delete the temporary file
+                        os.unlink(temp_file.name)
+
+                        image_uploaded = True
+
+                        if image_upload_result:
+                            instance.image_url = image_upload_result.url
+                            instance.image_file_name = image_upload_result.name
+                        else:
+                            raise
+
+                    except Exception as e:
+                        raise ImageMediaStorageError(
+                            "Image could not be uploaded to the media storage"
+                        ) from e
 
                     with transaction.atomic():
                         instance.user = CustomUser.objects.get(
                             unique_code=self.request.session.get("user_code")
                         )
 
-                        if filter_instance and filter_instance.exists():
+                        if filter_instance is not None and filter_instance.exists():
+                            options = ListAndSearchFileRequestOptions(
+                                tags=self.request.session.get("user_code"),
+                                path="main",
+                            )
+
+                            try:
+                                image_id = (
+                                    imagekit.list_files(options=options).list[0].file_id
+                                )
+
+                                result = imagekit.delete_file(file_id=image_id)
+
+                                if result.response_metadata.http_status_code != 204:
+                                    raise
+
+                            except Exception as e:
+                                print(f"Error during old image deletion: {e}")
+                                raise
+
                             filter_instance.delete()
 
                         instance.save()
 
                 except Exception as e:
-                    print("load_image" + e.__str__())
+                    if image_uploaded:
+                        options = ListAndSearchFileRequestOptions(
+                            tags=self.request.session.get("user_code"),
+                            path="main",
+                        )
+
+                        try:
+                            image_id = (
+                                imagekit.list_files(options=options).list[0].file_id
+                            )
+
+                            result = imagekit.delete_file(file_id=image_id)
+
+                            if result.response_metadata.http_status_code != 204:
+                                raise
+
+                        except Exception as e:
+                            print(f"Error during image upload: {e}")
+                            raise
+
+                    print("load_image: " + e.__str__())
                     raise
 
                 self.request.session["image_url"] = instance.image_url
@@ -1327,7 +1754,7 @@ class IndexView(View):
             self.context["format_reverse"] = True
 
             self.context["inspector_data"] = cache.get(
-                self.request.session.get("current_header")
+                f"{self.request.session.get('user_code')}-{self.request.session.get('current_header')}"
             )
 
         # Remove a Header from the Inspector Window
@@ -1384,7 +1811,7 @@ class IndexView(View):
                     self.render_preview_url()
 
                 except Exception as e:
-                    print("update_inspector_data" + e.__str__())
+                    print("update_inspector_data: " + e.__str__())
                     raise
 
             else:
@@ -1424,13 +1851,18 @@ class IndexView(View):
                 # Clean up: Delete the zip file
                 os.unlink(zip_path)
 
-                return response
+                # return response
+
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print(f"\nPOST took {elapsed_time:.6f} seconds to execute.\n")
 
 
 def Custom404View(request, exception=None):
     return render(request, "Custom404.html", status=404)
 
 
+@check_time
 def SignupView(request):
     signup_form_errors = None
     db_errors = None
@@ -1564,6 +1996,7 @@ def SignupView(request):
     )
 
 
+@check_time
 def LogoutView(request):
     cache.clear()
     logout(request)

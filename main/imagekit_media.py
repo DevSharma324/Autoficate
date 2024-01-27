@@ -1,35 +1,26 @@
+import os
 from imagekitio import ImageKit
-
+from imagekitio.models.UploadFileRequestOptions import UploadFileRequestOptions
 from django.core.files import File
 from imagekitio.models.ListAndSearchFileRequestOptions import (
     ListAndSearchFileRequestOptions,
 )
-from imagekitio.models.UploadFileRequestOptions import UploadFileRequestOptions
 from imagekitio.models.results.UploadFileResult import UploadFileResult
-
-import os
 
 
 class ImageMediaLibrary:
     """
     ImageKit SDK initialization with custom endpoints.
-        Args:
-            endpoint_name (str):
-                "main" - Used to store the main User Background Image
-                "preview" - Used to store the Preview Image (Reduced Quality/Size)
-                "buffer" - Used as a buffer for exporting Zip File
-
-    Requires the following Environment Variables to be set:
-        Keys:
-            IMAGEKIT_PUBLIC_KEY, IMAGEKIT_PRIVATE_KEY
-
-        Endpoints:
-            IMAGEKIT_MAIN_ENDPOINT, IMAGEKIT_PREVIEW_ENDPOINT, IMAGEKIT_BUFFER_ENDPOINT
-
     """
 
     ImageMedia = None
-    
+
+    ENDPOINT_MAPPING = {
+        "main": ("IMAGEKIT_MAIN_ENDPOINT", "main"),
+        "preview": ("IMAGEKIT_PREVIEW_ENDPOINT", "preview"),
+        "buffer": ("IMAGEKIT_BUFFER_ENDPOINT", "buffer"),
+    }
+
     def __init__(self, endpoint_name):
         """
         ImageKit SDK initialization with custom endpoints.
@@ -39,20 +30,13 @@ class ImageMediaLibrary:
                                  "preview" - Used to store the Preview Image (Reduced Quality/Size)
                                  "buffer" - Used as a buffer for exporting Zip File
         """
-        if endpoint_name == "main":
-            endpoint = os.getenv("IMAGEKIT_MAIN_ENDPOINT")
-            self.folder_name = "main"
-
-        elif endpoint_name == "preview":
-            endpoint = os.getenv("IMAGEKIT_PREVIEW_ENDPOINT")
-            self.folder_name = "preview"
-
-        elif endpoint_name == "buffer":
-            endpoint = os.getenv("IMAGEKIT_BUFFER_ENDPOINT")
-            self.folder_name = "buffer"
-
-        else:
+        if endpoint_name not in self.ENDPOINT_MAPPING:
             raise TypeError("Invalid Endpoint Type Provided")
+
+        endpoint_env_var, folder_name = self.ENDPOINT_MAPPING[endpoint_name]
+        endpoint = os.getenv(endpoint_env_var)
+
+        self.folder_name = folder_name
 
         # ImageKit SDK initialization
         self.ImageMedia = ImageKit(
@@ -77,28 +61,22 @@ class ImageMediaLibrary:
         """
 
         options = ListAndSearchFileRequestOptions(
-            # type="file",
-            # sort="ASC_CREATED",
-            path=image_type,
-            # search_query=f'tags IN ["{user_code}"]',
-            # file_type="all",
-            # limit=5,
-            # skip=0,
             tags=user_code,
+            path=image_type,
         )
 
         try:
-            image_id = imagekit.list_files(options=options).list[0].file_id
+            image_id = self.ImageMedia.list_files(options=options).list[0].file_id
 
             result = self.ImageMedia.delete_file(file_id=image_id)
 
             if result.response_metadata.http_status_code == 200:
                 return True
-            
+
         except Exception as e:
             print(f"Error during image upload: {e}")
             raise
-            
+
     def upload_image(
         self, image_file: File, tags: list = None, overwrite_status: bool = False
     ) -> UploadFileResult:
@@ -128,28 +106,17 @@ class ImageMediaLibrary:
         )
 
         try:
-            self.result = self.ImageMedia.upload_file(
+            result = self.ImageMedia.upload_file(
                 file=image_file.read(),  # required
                 file_name=image_file.name,  # required
                 options=options,
             )
 
             # Print that uploaded file's ID
-            print(self.result.url)
-            
-            print(self.result.response_metadata.raw)
+            print(result.url)
 
-            return self.result
+            print(result.response_metadata.raw)
+
+            return result
         except Exception as e:
-            print(f"Error during image upload: {e}")
-            print(f"Exception Type: {type(e).__name__}")  # Print the type of the exception
-            print(f"Exception Details: {str(e)}")         # Print the details of the exception
-
-            print(e.response_metadata.headers)
-            print(e.response_metadata.raw)
-            
-            # Optionally, print the traceback for more detailed information
-            import traceback
-            traceback.print_exc()
-            
             raise
