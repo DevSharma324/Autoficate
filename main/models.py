@@ -244,9 +244,10 @@ class ImageModel(models.Model):
     exports = models.PositiveIntegerField(
         default=0,
     )
-    user = models.ForeignKey(
+    user = models.OneToOneField(
         CustomUser,
         on_delete=models.CASCADE,
+        unique=True,
     )
 
     def delete(self, *args, **kwargs):
