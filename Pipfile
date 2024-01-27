@@ -18,6 +18,8 @@ requests = "==2.31.0"
 django-redis = "==5.4.0"
 redis = {version = "==5.0.1", extras = ["hiredis"]}
 django-dotenv = "==1.4.2"
+django-debug-toolbar = "==4.2.0"
+django-silk = "==5.1.0"
 
 [dev-packages]
 
