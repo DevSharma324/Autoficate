@@ -17,6 +17,9 @@ imagekitio = "==3.2.0"
 requests = "==2.31.0"
 django-redis = "==5.4.0"
 redis = {version = "==5.0.1", extras = ["hiredis"]}
+python-dotenv = "==1.0.1"
+django-debug-toolbar = "==4.2.0"
+django-silk = "==5.1.0"
 
 [dev-packages]
 
