@@ -92,59 +92,36 @@ def check_time(func):
     return wrapper
 
 
-def exception_handler(func):
+def get_error_message(exception):
     """
-    Decorator that handles various exceptions and renders appropriate error information.
+    Helper function to get user-friendly error message based on the exception type.
     """
-
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        instance = kwargs.get("self")  # Try to get self from kwargs
-        if instance is None and args:
-            instance = args[0]  # try to get it from args
-        try:
-            return func(*args, **kwargs)
-
-        except exceptions.ObjectDoesNotExist as e:
-            handle_exception(instance, "Object does not exist", e)
-
-        except exceptions.MultipleObjectsReturned as e:
-            handle_exception(instance, "Multiple objects found", e)
-
-        except exceptions.ValidationError as e:
-            handle_exception(instance, "Validation error", e)
-
-        except exceptions.SuspiciousOperation as e:
-            handle_exception(instance, "Suspicious operation detected", e)
-
-        except exceptions.PermissionDenied:
-            handle_exception(instance, "Permission denied")
-
-        except ConnectionError as e:
-            handle_exception(instance, "Connection error", e)
-
-        except TypeError as e:
-            handle_exception(instance, "Invalid type", e)
-
-        except Http404:
-            handle_exception(instance, "HTTP 404: Resource not found")
-
-        except IntegrityError as e:
-            handle_exception(instance, "Integrity error", e)
-
-        except DataError as e:
-            handle_exception(instance, "Data error", e)
-
-        except DatabaseError as e:
-            handle_exception(instance, "Database error", e)
-
-        except OperationalError as e:
-            handle_exception(instance, "Operational error", e)
-
-        except Exception as e:
-            handle_exception(instance, "Unexpected error", e)
-
-    return wrapper
+    if isinstance(exception, ObjectDoesNotExist):
+        return "The requested object does not exist."
+    elif isinstance(exception, MultipleObjectsReturned):
+        return "Multiple objects were found when only one was expected."
+    elif isinstance(exception, ValidationError):
+        return "Validation error occurred."
+    elif isinstance(exception, SuspiciousOperation):
+        return "A suspicious operation was detected."
+    elif isinstance(exception, PermissionDenied):
+        return "Permission denied: You do not have permission to perform this action."
+    elif isinstance(exception, ConnectionError):
+        return "A connection error occurred."
+    elif isinstance(exception, TypeError):
+        return "An unexpected data type was encountered."
+    elif isinstance(exception, Http404):
+        return "The requested resource was not found."
+    elif isinstance(exception, IntegrityError):
+        return "An integrity constraint violation occurred."
+    elif isinstance(exception, DataError):
+        return "Invalid data types or lengths were provided."
+    elif isinstance(exception, DatabaseError):
+        return "A database error occurred."
+    elif isinstance(exception, OperationalError):
+        return "An operational error occurred."
+    else:
+        return "An unexpected error occurred."
 
 
 def handle_exception(instance, message, e=None):
@@ -155,13 +132,49 @@ def handle_exception(instance, message, e=None):
         if hasattr(e, "form_name") and e.form_name:
             instance.context[f"{e.form_name}_errors"] = {
                 "has_error": True,
-                "error": message,
+                "error": {
+                    "basic": message,
+                    "advanced": f"{type(e).__name__}: {e.__str__()}",
+                },
             }
+        elif message and e:
+            instance.context["db_error"]["basic"] = message
+            instance.context["db_error"][
+                "advanced"
+            ] = f"{type(e).__name__}: {e.__str__()}"
         else:
             instance.context["db_error"] = message
 
         if settings.DEBUG and e:
             return debug.technical_500_response(instance.request, *sys.exc_info())
+
+
+def exception_handler(func):
+    """
+    Decorator that handles various exceptions and returns an error message in the context.
+    """
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except (
+            ObjectDoesNotExist,
+            MultipleObjectsReturned,
+            ValidationError,
+            SuspiciousOperation,
+            PermissionDenied,
+            ConnectionError,
+            TypeError,
+            Http404,
+            IntegrityError,
+            DataError,
+            DatabaseError,
+            OperationalError,
+        ) as e:
+            handle_exception(args[0], get_error_message(e), e)
+
+    return wrapper
 
 
 def page_renderer(func):
