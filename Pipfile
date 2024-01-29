@@ -18,9 +18,10 @@ requests = "==2.31.0"
 django-redis = "==5.4.0"
 redis = {version = "==5.0.1", extras = ["hiredis"]}
 django-dotenv = "==1.4.2"
+dj-database-url = "==2.1.0"
+gunicorn = "==21.2.0"
 
 [dev-packages]
 
 [requires]
-python_version = "3.11"
-python_full_version = "3.11.3"
+python_version = "== '3.9' or == '3.11'"

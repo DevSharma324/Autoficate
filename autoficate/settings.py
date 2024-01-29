@@ -1,16 +1,9 @@
 import os
 from pathlib import Path
-from dotenv import load_dotenv
-
+import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
-# Load environment variables from .env file
-load_dotenv()
-
-# Load environment variables from .env file
-load_dotenv()
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
@@ -79,12 +72,15 @@ WSGI_APPLICATION = "autoficate.wsgi.app"
 
 DATABASES = {
     "default": {
+        dj_database_url.parse(os.environ.get("RENDER_POSTGRES_DATABASE_URL")),
+    },
+    "vercel_db": {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": os.environ.get("POSTGRES_DATABASE"),
         "USER": os.environ.get("POSTGRES_USER"),
         "PASSWORD": os.environ.get("POSTGRES_PASSWORD"),
         "HOST": os.environ.get("POSTGRES_HOST"),
-    }
+    },
 }
 
 
