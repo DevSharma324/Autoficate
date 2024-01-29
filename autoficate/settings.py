@@ -1,16 +1,9 @@
 import os
 from pathlib import Path
-from dotenv import load_dotenv
-
+import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
-# Load environment variables from .env file
-load_dotenv()
-
-# Load environment variables from .env file
-load_dotenv()
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
@@ -35,14 +28,12 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
 ]
 
-if os.environ.get("ALLOWED_HOSTS") != ".vercel.app":
+if os.environ.get("ALLOWED_HOSTS") == "127.0.0.1":
     INSTALLED_APPS.append("whitenoise.runserver_nostatic")  # For Local Development
     print("Installed whitenoise_nostatic\n")
 
 
 MIDDLEWARE = [
-    "debug_toolbar.middleware.DebugToolbarMiddleware",
-    "silk.middleware.SilkyMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -78,13 +69,7 @@ WSGI_APPLICATION = "autoficate.wsgi.app"
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("POSTGRES_DATABASE"),
-        "USER": os.environ.get("POSTGRES_USER"),
-        "PASSWORD": os.environ.get("POSTGRES_PASSWORD"),
-        "HOST": os.environ.get("POSTGRES_HOST"),
-    }
+    "default": dj_database_url.parse(os.environ.get("RENDER_POSTGRES_DATABASE_URL"))
 }
 
 
