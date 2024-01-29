@@ -28,14 +28,12 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
 ]
 
-if os.environ.get("ALLOWED_HOSTS") != ".vercel.app":
+if os.environ.get("ALLOWED_HOSTS") == "127.0.0.1":
     INSTALLED_APPS.append("whitenoise.runserver_nostatic")  # For Local Development
     print("Installed whitenoise_nostatic\n")
 
 
 MIDDLEWARE = [
-    "debug_toolbar.middleware.DebugToolbarMiddleware",
-    "silk.middleware.SilkyMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
