@@ -71,16 +71,7 @@ WSGI_APPLICATION = "autoficate.wsgi.app"
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
 DATABASES = {
-    "default": {
-        dj_database_url.parse(os.environ.get("RENDER_POSTGRES_DATABASE_URL")),
-    },
-    "vercel_db": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("POSTGRES_DATABASE"),
-        "USER": os.environ.get("POSTGRES_USER"),
-        "PASSWORD": os.environ.get("POSTGRES_PASSWORD"),
-        "HOST": os.environ.get("POSTGRES_HOST"),
-    },
+    "default": dj_database_url.parse(os.environ.get("RENDER_POSTGRES_DATABASE_URL"))
 }
 
 
