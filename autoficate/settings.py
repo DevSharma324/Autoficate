@@ -72,6 +72,23 @@ DATABASES = {
     "default": dj_database_url.parse(os.environ.get("RENDER_POSTGRES_DATABASE_URL"))
 }
 
+# DATABASES = {
+#     "default": {
+#         "ENGINE": "django.db.backends.postgresql",
+#         "NAME": os.getenv("RENDER_POSTGRES_DATABASE"),
+#         "USER": os.getenv("RENDER_POSTGRES_USER"),
+#         "PASSWORD": os.getenv("RENDER_POSTGRES_PASSWORD"),
+#         "HOST": os.getenv("RENDER_POSTGRES_HOST"),
+#     }
+# }
+
+
+# DATABASES = {
+#     "default": {
+#         "ENGINE": "django.db.backends.sqlite3",
+#         "NAME": BASE_DIR / "db.sqlite3",
+#     }
+# }
 
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
@@ -111,6 +128,7 @@ CACHES = {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
             "parser_class": "redis.connection.HiredisParser",
         },
+        "TIMEOUT": 60 * 60 * 2,  # 2 hours
     },
 }
 
@@ -124,7 +142,7 @@ MEDIA_ROOT = os.path.join(BASE_DIR, "media/")
 SESSION_REDIS_PREFIX = "session"
 SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
 SESSION_CACHE_ALIAS = "session"
-SESSION_COOKIE_AGE = 60 * 60 * 24 * 14  # 2 weeks
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 7  # 7 days
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_HTTPONLY = True
