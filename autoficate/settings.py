@@ -128,10 +128,9 @@ CACHES = {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
             "parser_class": "redis.connection.HiredisParser",
         },
+        "TIMEOUT": 60 * 60 * 2,  # 2 hours
     },
 }
-
-CACHE_TTL = 60 * 60 * 2  # 2 hours
 
 AUTH_USER_MODEL = "main.CustomUser"
 

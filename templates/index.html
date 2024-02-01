@@ -173,7 +173,7 @@
                         <button type="button" name="button" value="inspector_data_item_remove">-</button><br>
                     {% endfor %}
                     
-                    {% if not request.session.full_available %}
+                    {% if not full_available %}
                         .<br>.<br>.<br><button type="submit" name="submit" value="load_all_inspector_data">Load all</button><br>
                     {% endif %}
                     
