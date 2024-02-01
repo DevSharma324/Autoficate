@@ -45,7 +45,10 @@
             New User:
             <form method="post" enctype="multipart/form-data">
                 {% csrf_token %}
-                <br>{{ name_signup_form_errors.error }} <br>
+
+                {% if name_signup_form_errors.has_error %}
+                    <br>{{ name_signup_form_errors.error.advanced }} <br>
+                {% endif %}
                 
                 First Name: {{ name_signup_form.first_name }}<br>
                 Last Name: {{ name_signup_form.last_name }} <br>
@@ -62,7 +65,10 @@
             Login:
             <form method="post">
                 {% csrf_token %}
-                <br>{{ login_form_errors.error.error }} <br>
+                
+                {% if login_form_errors.has_error %}
+                    <br>{{ login_form_errors.error.advanced }} <br>
+                {% endif %}
                 
                 Email: {{ login_form.user_email }}<br>
                 Password: {{ login_form.password }} <br>
@@ -78,7 +84,10 @@
             Item Input:
             <form method="post">
                 {% csrf_token %}
-                <br>{{ item_form_errors.error }}<br>
+
+                {% if item_form_errors.has_error %}
+                    <br>{{ item_form_errors.error.advanced }}<br>
+                {% endif %}
                 
                 Item Name: {{ item_form.item_heading }}<br>
                 Position: {{ item_form.position_x }}&nbsp;&nbsp;&nbsp;{{ item_form.position_y }}<br>
@@ -96,7 +105,10 @@
             Excel File Upload:
             <form method="post" enctype="multipart/form-data">
                 {% csrf_token %}
-                <br>{{ excel_form_errors.error }} <br>
+
+                {% if excel_form_errors.has_error %}
+                    <br>{{ excel_form_errors.error.advanced }} <br>
+                {% endif %}
 
                 Status: {{ excel_file_status }} <br>
                 Excel Filename: {{ request.session.excel_file_name }} <br><br>
@@ -112,7 +124,10 @@
             Image Upload:
             <form method="post" enctype="multipart/form-data">
                 {% csrf_token %}
-                <br>{{ image_form_errors.error }} <br>
+
+                {% if image_form_errors.has_error %}
+                    <br>{{ image_form_errors.error.advanced }} <br>
+                {% endif %}
 
                 Image Filename: {{ request.session.image_file_name }}<br>
                 Image URL: {{ request.session.image_url }}<br>
@@ -129,38 +144,68 @@
         </div>
 
         <div>
-            <hr>
-            {{ db_error_header }}<br>
+            <hr><br>
             Input List Window:
-            {% for header in request.session.inspector_header %}
+            {% if request.session.inspector_header %}
+                {% for header in request.session.inspector_header %}
                 <form method="post">
                     {% csrf_token %}
                     <input type="hidden" name="header_item" value="{{ header }}">
                     <button type="submit" name="inspector_header_item" value="{{ header }}">{{ header }}</button>&nbsp;&nbsp;
                     <button type="submit" name="submit_remove" value="inspector_header_item_remove">-</button><br>
                 </form>
-            {% endfor %}
+                {% endfor %}
+            {% else %}
+                <br><br>No Data Available<br><br>
+            {% endif %}
         </div>
 
         <div>
-            <hr>
-            {{ db_error_data }}<br>
+            <hr><br>
             Inspector Panel:
+
             <form method="post">
                 {% csrf_token %}
+                
                 {% if inspector_data %}
                     {% for item in inspector_data %}
                         <input type="text" name="inspector_data_item" required value="{{ item }}">&nbsp;&nbsp;
                         <button type="button" name="button" value="inspector_data_item_remove">-</button><br>
                     {% endfor %}
+                    
+                    {% if not request.session.full_available %}
+                        .<br>.<br>.<br><button type="submit" name="submit" value="load_all_inspector_data">Load all</button><br>
+                    {% endif %}
+                    
+                    {% comment %} 
+                    sample input types to add for a new item (on pressing '+')
+                        
+                        <input type="text" name="inspector_data_item_new" required value="{{ item }}">&nbsp;&nbsp;
+                        <button type="button" name="button" value="inspector_data_item_remove">-</button><br>
+
+                    if the user asks to add these items at the top of the data set
+                    include this
+
+                        <input type="hidden" name="inspector_data_item_location" value="top">
+                        
+                    else for the default bottom
+                    include this
+                        
+                        <input type="hidden" name="inspector_data_item_location" value="bottom">
+                            
+                        {% endcomment %}
+                <input type="hidden" name="inspector_data_item_location" value="top">
+
                 {% endif %}
 
                 {% if not inspector_data %}
-                    No Data Available
+                    <br>No Data Available<br>
                 {% endif %}
-                <br><button type="buttom" name="button" value="inspector_data_item_add">+</button>&nbsp;&nbsp;
                 
-                {% comment %} dont display fs list is empty {% endcomment %}
+                {% if request.session.inspector_header %}
+                    <br><button type="buttom" name="button" value="inspector_data_item_add">+</button>&nbsp;&nbsp;
+                {% endif %}
+                
                 {% if inspector_data %}
                     <button type="submit" name="submit" value="update_inspector_data">Update Data</button><br><br>
                 {% endif %}
@@ -171,7 +216,11 @@
             Export:
             <form method="post">
                 {% csrf_token %}
-                {{ export_form_errors.error }}<br>
+
+                {% if export_form_errors.has_error %}
+                    {{ export_form_errors.error.advanced }}<br>
+                {% endif %}
+
                 {{ export_form.export_format }}<br>
                 <button type="submit" name="submit" value="export_images">Export</button><br>
             </form>

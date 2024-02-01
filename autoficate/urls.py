@@ -11,10 +11,10 @@ from django.conf.urls import handler404
 handler404 = Custom404View
 
 urlpatterns = [
-    path(os.environ.get("ADMIN_PATH"), admin.site.urls),
+    path(f'{os.environ.get("ADMIN_PATH")}/', admin.site.urls),
     path("", IndexView.as_view(), name="index"),
     path("signup/", SignupView, name="signup"),
-    path("logout/", LogoutView),
+    path("logout/", LogoutView, name="logout"),
 ]
 
 

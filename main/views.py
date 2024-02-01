@@ -84,9 +84,7 @@ def check_time(func):
         result = func(*args, **kwargs)
         end_time = time.time()
         elapsed_time = end_time - start_time
-        print(
-            f"\nTIMER: '{func.__name__}' took {elapsed_time:.6f} seconds to execute.\n"
-        )
+        print(f"\n'{func.__name__}' took {elapsed_time:.6f} seconds\n")
         return result
 
     return wrapper
@@ -130,20 +128,30 @@ def handle_exception(instance, message, e=None):
     """
     if instance:
         if hasattr(e, "form_name") and e.form_name:
-            instance.context[f"{e.form_name}_errors"] = {
-                "has_error": True,
-                "error": {
-                    "basic": message,
-                    "advanced": f"{type(e).__name__}: {e.__str__()}",
-                },
-            }
+            error_key = f"{e.form_name}_errors"
+            if error_key not in instance.context or all(
+                value is None for value in instance.context[error_key].values()
+            ):
+                instance.context[error_key] = {
+                    "has_error": True,
+                    "error": {
+                        "basic": message,
+                        "advanced": f"{type(e).__name__}: {e}",
+                    },
+                }
         elif message and e:
-            instance.context["db_error"]["basic"] = message
-            instance.context["db_error"][
-                "advanced"
-            ] = f"{type(e).__name__}: {e.__str__()}"
+            db_error = instance.request.session.setdefault("db_error", {})
+            if all(value is None for value in db_error.values()):
+                db_error.update(
+                    {
+                        "basic": message,
+                        "advanced": f"{type(e).__name__}: {e}",
+                    }
+                )
         else:
-            instance.context["db_error"] = message
+            db_error = instance.request.session.setdefault("db_error", {})
+            if db_error["basic"] is None:
+                db_error["basic"] = message
 
         if settings.DEBUG and e:
             return debug.technical_500_response(instance.request, *sys.exc_info())
@@ -193,9 +201,7 @@ def page_renderer(func):
 
 
 class IndexView(View):
-    # Reload the Cache and update the session variables accordingly
-    @check_time
-    def reload_cache(self, headers, header_items):
+    def reload_cache_old(self, headers, header_items):
         """Update the Cache for Header items and Header Data. It also Updates the Respective Session Variables"""
 
         try:
@@ -222,19 +228,27 @@ class IndexView(View):
                             item_set_heading=item,
                             user_code=self.session["user_code"],
                         ).item_set
-                    )
+                        # cache only the first 10 items if they exist
+                    )[: self.cache_max_limit]
+
                     inspector_data_buffer[item] = inspector_data
 
                 for item in header_items:
                     cache.set(
-                        f"{self.request.session.get('user_code')}-{item}",
+                        f"{self.session['user_code']}-{item}",
                         inspector_data_buffer[item],
                     )
 
-                if self.request.session.get("current_header", "") != "":
+                if self.session.get("current_header", "") != "":
                     self.context["inspector_data"] = cache.get(
-                        f"{self.request.session.get('user_code')}-{self.request.session.get('current_header')}"
+                        f"{self.session['user_code']}-{self.session.get('current_header')}"
                     )
+                    if (
+                        self.context.get("inspector_data")
+                        and len(self.context.get("inspector_data"))
+                        <= self.cache_max_limit
+                    ):
+                        self.session["full_available"] = True
 
             if headers:
                 cache.set(self.cache_key_header, inspector_header)
@@ -252,7 +266,80 @@ class IndexView(View):
             print("reload_cache: " + e.__str__())
             raise
 
+    # Reload the Cache and update the session variables accordingly
+    @check_time
+    def reload_cache(self, headers, header_items):
+        """Update the Cache for Header items and Header Data. It also Updates the Respective Session Variables"""
+
+        try:
+            if headers:
+                inspector_header = list(
+                    DataItemSetModel.objects.filter(
+                        user_code=self.session["user_code"]
+                    ).values_list("item_set_heading", flat=True)
+                )
+
+            if header_items is not None:
+                if header_items[0] == "__all__":
+                    if headers:
+                        header_items = inspector_header
+                    elif not headers and cache.get(self.cache_key_header) is not None:
+                        header_items = cache.get(self.cache_key_header)
+                    else:
+                        raise ObjectDoesNotExist()
+
+                    inspector_data_buffer = {}
+                    inspector_full_available_buffer = {}
+
+                    data_item_set_model = DataItemSetModel.objects.filter(
+                        user_code=self.session["user_code"]
+                    )
+
+                    for item in header_items:
+                        full_available = False
+                        inspector_data = ast.literal_eval(
+                            data_item_set_model.get(item_set_heading=item).item_set
+                        )
+
+                        if len(inspector_data) <= self.cache_max_limit:
+                            full_available = True
+
+                        inspector_data_buffer[item] = inspector_data
+                        inspector_full_available_buffer[item] = full_available
+
+                    # Update cache
+                    for item, data in inspector_data_buffer.items():
+                        cache_key = f"{self.session['user_code']}-{item}"
+                        if cache_key == self.cache_key_header:
+                            continue  # Skip header cache key
+                        cache.set(cache_key, data[: self.cache_max_limit])
+
+                    # Update full availability flags
+                    for item, full_available in inspector_full_available_buffer.items():
+                        full_available_key = (
+                            f"{self.session['user_code']}-{item}-full_available"
+                        )
+                        cache.set(full_available_key, full_available)
+
+            if headers:
+                # Update cache only if no exceptions were raised
+                cache.set(self.cache_key_header, inspector_header)
+                self.request.session["inspector_header"] = inspector_header
+
+        except KeyError as e:
+            self.reload_cache(headers=True, header_items=None)
+            self.reload_cache(headers=False, header_items=header_items)
+
+        except ObjectDoesNotExist as e:
+            print("reload_cache: No Item Data in DB")
+            return False
+
+        except Exception as e:
+            print("reload_cache:", e)
+            raise
+
     # Initliaze the Context Dictionary
+    @check_time
     def init_context(self):
         """Initializes the context dictionary which stores all the metadata about the user"""
 
@@ -260,49 +347,64 @@ class IndexView(View):
         self.context["set_cookie"] = False
         self.context["cookie_key"] = None
         self.context["cookie_data"] = None
-        self.request.session["cookie_is_set"] = None
+
+        self.context["full_available"] = cache.get(
+            f"{self.session.get('user_code')}-{self.session.get('current_header')}-full_available",
+            False,
+        )
+
+        if not self.session.get("cookie_is_set"):
+            self.request.session["cookie_is_set"] = None
 
         # keep unchanged if is True or False, and set it to None otherwise
-        if self.request.session.get("cookie_consent") not in [True, False]:
+        if self.session.get("cookie_consent") not in [True, False]:
             self.request.session["cookie_consent"] = None
 
-        if self.context.get("db_error") is None:
-            self.context["db_error"] = None
+        if self.session.get("db_error"):
+            if all(value is None for value in self.session["db_error"].values()):
+                # Both basic and advanced are empty, resetting db_error
+                self.request.session["db_error"] = {"basic": None, "advanced": None}
 
         self.context["login_form"] = None
-        self.context["login_form_errors"] = {"has_error": False, "error": None}
+        self.context["login_form_errors"] = {
+            "has_error": False,
+            "error": {"basic": None, "advanced": None},
+        }
 
-        self.context["name_signup_form_errors"] = {"has_error": False, "error": None}
+        self.context["name_signup_form_errors"] = {
+            "has_error": False,
+            "error": {"basic": None, "advanced": None},
+        }
 
         self.context["excel_form"] = None
-        self.context["excel_form_errors"] = {"has_error": False, "error": None}
+        self.context["excel_form_errors"] = {
+            "has_error": False,
+            "error": {"basic": None, "advanced": None},
+        }
         self.context["excel_file_status"] = None
 
         self.context["item_form"] = None
-        self.context["item_form_errors"] = {"has_error": False, "error": None}
+        self.context["item_form_errors"] = {
+            "has_error": False,
+            "error": {"basic": None, "advanced": None},
+        }
 
         self.context["image_form"] = None
-        self.context["image_form_errors"] = {"has_error": False, "error": None}
+        self.context["image_form_errors"] = {
+            "has_error": False,
+            "error": {"basic": None, "advanced": None},
+        }
         self.context["image_status"] = None
         self.context["image_url"] = None
 
         self.context["export_form"] = None
-        self.context["export_form_errors"] = {"has_error": False, "error": None}
-
-        # TODO: REMOVE
-        # if cache.get(self.cache_key_header) is not None:
-        #     self.context["inspector_header"] = cache.get(self.cache_key_header)
-
-        # if self.request.session.get("current_header", "") != "":
-        #     self.context["inspector_data"] = cache.get(
-        #         self.request.session.get("current_header")
-        #     )
-
-        # self.context["inspector_data"] = cache.get(
-        #     self.request.session.get("current_header")
-        # )
+        self.context["export_form_errors"] = {
+            "has_error": False,
+            "error": {"basic": None, "advanced": None},
+        }
 
     # Setup the Forms
+    @check_time
     def verify_form_data(self):
         """Setup the Form Values and Session Variables"""
 
@@ -313,18 +415,18 @@ class IndexView(View):
         ] = ExcelForm()  # IDEA: add excel_file name as the data
 
         if (
-            self.request.session.get("current_header", None) is not None
-            and self.request.session.get("user_code", None) is not None
+            self.session.get("current_header", None) is not None
+            and self.session.get("user_code", None) is not None
         ):
             try:
                 instance = DataItemSetModel.objects.get(
                     user_code=self.session["user_code"],
-                    item_set_heading=self.request.session.get("current_header"),
+                    item_set_heading=self.session.get("current_header"),
                 )
 
                 self.context["item_form"] = ItemForm(
                     initial={
-                        "item_heading": self.request.session.get("current_header"),
+                        "item_heading": self.session.get("current_header"),
                         "color": instance.color,
                     },
                     instance=instance,
@@ -338,7 +440,7 @@ class IndexView(View):
                 raise
 
         else:
-            if self.request.session.get("current_header", None) is not None:
+            if self.session.get("current_header", None) is not None:
                 if DataItemSetModel.objects.filter(
                     user_code=self.session["user_code"]
                 ).exists():
@@ -360,107 +462,18 @@ class IndexView(View):
 
         self.context["export_form"] = ExportForm()
 
-    def verify_user_type_mid(self):
-        user_code = self.session["user_code"]
-        cookie_key = self.cookie_key
-
+    @check_time
+    def verify_user_type(self):
+        # Check if user code is present
+        user_code = self.session.get("user_code")
         if user_code:
             self.context["new_user"] = False
             self.cache_key_header = f"{user_code}-db_cache_headers"
 
-        self.request.session.set_test_cookie()
-
-        if self.request.session.test_cookie_worked():
-            cookie_consent = self.request.POST.get("allow_cookies")
-            if (
-                cookie_consent is not None
-                and cookie_consent == "true"
-                and not self.request.session.get("cookie_is_set")
-            ):
-                self.context.update(
-                    {
-                        "set_cookie": True,
-                        "cookie_key": cookie_key,
-                        "cookie_data": self.encrypted_cookie_data(),
-                        "cookie_data_temp": self.decrypt_cookie_data(
-                            self.context.get("cookie_data")
-                        ),
-                    }
-                )
-                self.request.session["cookie_is_set"] = True
-
-            # Clear cookie if consent not given
-            elif cookie_consent == "false" and self.request.session.get(
-                "cookie_is_set"
-            ):
-                self.context.update(
-                    {
-                        "set_cookie": False,
-                        "cookie_key": None,
-                        "cookie_data": None,
-                    }
-                )
-                self.request.session["cookie_is_set"] = False
-
-            # Validate and process stored cookie
-            if (
-                not self.request.session.get("cookie_is_set")
-                and cookie_key in self.request.COOKIES
-            ):
-                cookie_data = self.decrypt_cookie_data(
-                    self.request.COOKIES.get(cookie_key)
-                )
-                if (
-                    cookie_data
-                    and CustomUser.objects.filter(unique_code=cookie_data).exists()
-                ):
-                    self.request.session["user_code"] = cookie_data
-                    self.context["new_user"] = False
-                else:
-                    self.context.update(
-                        {
-                            "new_user": True,
-                            "name_signup_form": NameSignUpForm(),
-                        }
-                    )
-                    self.request.session["cookie_is_set"] = None
-
-            else:
-                self.context["name_signup_form"] = NameSignUpForm()
-
-        else:
-            print("Cookie access is Disabled.")
-
-        self.request.session[
-            "is_verified"
-        ] = self.request.user.is_authenticated and isinstance(
-            self.request.user, CustomUser
-        )
-        if not cache.get(self.cache_key_header, []) and user_code:
-            self.reload_cache(headers=True, header_items=["__all__"])
-            self.context["inspector_data"] = cache.get(
-                f"{user_code}-{self.request.session.get('current_header')}"
-            )
-        elif self.request.session.get("current_header") is not None:
-            self.context["inspector_data"] = cache.get(
-                f"{user_code}-{self.request.session.get('current_header')}"
-            )
-
-        self.request.session.delete_test_cookie()
-
-    @check_time
-    def verify_user_type(self):
-        """Updates the user type data in the context dictionary and handles cookies."""
-        # TODO: Check if this Works at all
-        # Check if user code is present
-        if self.session.get("user_code"):
-            self.context["new_user"] = False
-            self.cache_key_header = f'{self.session["user_code"]}-db_cache_headers'
-
             # Set test cookie if consent is given
-            if not self.request.session.get(
-                "cookie_is_set"
-            ) and self.request.session.get("cookie_consent"):
+            if not self.session.get("cookie_is_set") and self.session.get(
+                "cookie_consent"
+            ):
                 self.set_test_cookie()  # Set test cookie
                 self.context.update(
                     {
@@ -473,9 +486,7 @@ class IndexView(View):
                     }
                 )
                 self.request.session["cookie_is_set"] = True
-
-            # Handle existing cookies
-            elif self.request.session.get("cookie_is_set"):
+            elif self.session.get("cookie_is_set"):
                 self.delete_test_cookie()  # Delete test cookie
                 self.context.update(
                     {"set_cookie": False, "cookie_key": None, "cookie_data": None}
@@ -492,25 +503,25 @@ class IndexView(View):
             )
 
         # Validate stored cookies
-        if not self.request.session.get("cookie_is_set") and self.request.COOKIES.get(
-            self.cookie_key
-        ):
-            if self.test_cookie_worked():  # Test if cookie worked
-                if CustomUser.objects.filter(
-                    unique_code=self.request.COOKIES.get(self.cookie_key)
-                ).exists():
-                    self.request.session["user_code"] = self.request.COOKIES.get(
-                        self.cookie_key
-                    )
-                    self.context["new_user"] = False
-                else:
-                    self.context.update(
-                        {
-                            "new_user": True,
-                            "name_signup_form": NameSignUpForm(),
-                            "cookie_is_set": None,
-                        }
-                    )
+        cookie_is_set = self.session.get("cookie_is_set")
+        cookie_key_value = self.request.COOKIES.get(self.cookie_key)
+        if not cookie_is_set and cookie_key_value:
+            if self.test_cookie_worked():
+                custom_user_exists = CustomUser.objects.filter(
+                    unique_code=cookie_key_value
+                ).exists()
+                self.request.session["user_code"] = (
+                    cookie_key_value if custom_user_exists else None
+                )
+                self.context.update(
+                    {
+                        "new_user": not custom_user_exists,
+                        "name_signup_form": NameSignUpForm()
+                        if custom_user_exists
+                        else None,
+                        "cookie_is_set": None,
+                    }
+                )
             else:
                 self.context.update(
                     {
@@ -521,136 +532,34 @@ class IndexView(View):
                 )
 
         # Set default signup form
-        self.context["name_signup_form"] = NameSignUpForm()
+        self.context.setdefault("name_signup_form", NameSignUpForm())
 
         # Check user authentication
-        if self.request.user.is_authenticated and isinstance(
-            self.request.user, CustomUser
-        ):
-            self.request.session["is_verified"] = True
-        else:
-            self.request.session["is_verified"] = False
+        self.request.session["is_verified"] = (
+            self.request.session.get("is_verified")
+            and self.request.user.is_authenticated
+            and isinstance(self.request.user, CustomUser)
+        )
 
         # Reload cache and display headers if possible
-        if not cache.get(self.cache_key_header, []) and self.request.session.get(
-            "user_code"
-        ):
+        current_header = self.session.get("current_header")
+        if not cache.get(self.cache_key_header) and user_code:
             self.reload_cache(headers=True, header_items=["__all__"])
-            self.context["inspector_data"] = cache.get(
-                f"{self.request.session.get('user_code')}-{self.request.session.get('current_header')}"
-            )
-        elif self.request.session.get("current_header") is not None:
-            self.context["inspector_data"] = cache.get(
-                f"{self.request.session.get('user_code')}-{self.request.session.get('current_header')}"
-            )
+            self.context["inspector_data"] = cache.get(f"{user_code}-{current_header}")
+        elif current_header is not None:
+            self.context["inspector_data"] = cache.get(f"{user_code}-{current_header}")
 
-    # Update the user type
-    def verify_user_type_old(self):
-        """Updates the user type data in the context dictionary."""
-
-        """
-        TODO:
-        
-        set_test_cookie()¶
-        Sets a test cookie to determine whether the user's browser supports cookies. Due to the way cookies work, you won’t be able to test this until the user’s next page request. See Setting test cookies below for more information.
-
-        test_cookie_worked()¶
-        Returns either True or False, depending on whether the user's browser accepted the test cookie. Due to the way cookies work, you’ll have to call set_test_cookie() on a previous, separate page request. See Setting test cookies below for more information.
-
-        delete_test_cookie()¶
-        Deletes the test cookie. Use this to clean up after yourself.
-        """
-
-        if self.session["user_code"] != "":
-            self.context["new_user"] = False
-
-            self.cache_key_header = f'{self.session["user_code"]}-db_cache_headers'
-
-            if self.request.session.get(
-                "cookie_is_set"
-            ) is not True and self.request.session.get("cookie_consent", False):
-                self.context["set_cookie"] = True
-                self.request.session["cookie_is_set"] = True
-                self.context["cookie_key"] = self.cookie_key
-                self.context[
-                    "cookie_data"
-                ] = self.encrypted_cookie_data()  # TODO: check whole functionality
-                self.context["cookie_data_temp"] = self.decrypt_cookie_data(
-                    self.context.get("cookie_data")
-                )  # TODO: Remove
-
-            elif self.request.session.get("cookie_is_set"):
-                self.context["set_cookie"] = False
-                self.context["cookie_key"] = None
-                self.context["cookie_data"] = None
-                self.request.session["cookie_is_set"] = False
-
-        # Validates the Cookie Save Consent
-        if self.request.POST.get("allow_cookies", None) is not None:
-            self.request.session["cookie_consent"] = bool(
-                self.request.POST.get("allow_cookies")
-            )
-
-        # Checks if the Cookie Stored is Valid
-        if (
-            self.request.session.get("cookie_is_set") is False
-            and self.request.COOKIES.get(self.cookie_key) is not None
-        ):
-            if (
-                self.decrypt_cookie_data(self.request.COOKIES.get(self.cookie_key))
-                is not False
-            ):
-                if CustomUser.objects.filter(
-                    unique_code=self.request.COOKIES.get(self.cookie_key)
-                ).exists():
-                    self.request.session["user_code"] = self.request.COOKIES.get(
-                        self.cookie_key
-                    )
-
-                    self.context["new_user"] = False
-
-                else:
-                    self.context["new_user"] = True
-                    self.context["name_signup_form"] = NameSignUpForm()
-                    self.request.session["cookie_is_set"] = None
-
-            else:
-                self.context["new_user"] = True
-                self.context["name_signup_form"] = NameSignUpForm()
-                self.request.session["cookie_is_set"] = None
-
-        else:
-            self.context["name_signup_form"] = NameSignUpForm()
-
-        # check if the user is Logged in or has a Session Started
-        if self.request.user.is_authenticated and isinstance(
-            self.request.user, CustomUser
-        ):
-            self.request.session["is_verified"] = True
-
-        else:
-            self.request.session["is_verified"] = False
-
-        # reload cache and display headers if possible
-        if not cache.get(self.cache_key_header, []) and self.request.session.get(
-            "user_code", ""
-        ):
-            self.reload_cache(headers=True, header_items=["__all__"])
-            self.context["inspector_data"] = cache.get(
-                f"{self.request.session.get('user_code')}-{self.request.session.get('current_header')}"
-            )
-        else:
-            if self.request.session.get("current_header") is not None:
-                self.context["inspector_data"] = cache.get(
-                    f"{self.request.session.get('user_code')}-{self.request.session.get('current_header')}"
-                )
+        self.context["full_available"] = cache.get(
+            f"{self.session.get('user_code')}-{self.session.get('current_header')}-full_available",
+            False,
+        )
 
     # Render Preview Image
     @check_time
     def render_preview_url(self):  # TODO: Verify
         """Renders a Single Image Using the First Set of Items for Preview"""
 
-        if self.request.session.get("image_url", "") != "":
+        if self.session.get("image_url", "") != "":
             if self.session["user_code"] != "":
                 try:
                     data_items = DataItemSetModel.objects.filter(
@@ -1047,6 +956,7 @@ class IndexView(View):
 
     # Cookie Encr/Decr Methods
     # Encryption for Cookie
+    @check_time
     def decrypt_cookie_data(self, encrypted_data_with_iv):
         try:
             decryption_key = settings.SECRET_KEY[:32].encode(
@@ -1072,6 +982,7 @@ class IndexView(View):
             print(e.__str__())
             return None
 
+    @check_time
     def encrypted_cookie_data(self):
         try:
             encryption_key = settings.SECRET_KEY[:32].encode(
@@ -1101,6 +1012,7 @@ class IndexView(View):
     # Templates
     home_template = "index.html"
     cookie_key = "autoficate-key"
+    cache_max_limit = 5  # TODO: change to 10
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -1113,9 +1025,9 @@ class IndexView(View):
     def dispatch(self, request, *args, **kwargs):
         try:
             self.request = request
-            self.session["user_code"] = self.request.session.get("user_code", None)
+            self.session = self.request.session
 
-            if self.context is not None:
+            if not self.context:
                 self.init_context()
 
             self.verify_form_data()
@@ -1134,6 +1046,7 @@ class IndexView(View):
     @page_renderer
     def post(self, request, *args, **kwargs):
         start_time = time.time()
+        print("--POST Start--")
 
         # Check and Set User Information Status
         if (
@@ -1179,8 +1092,8 @@ class IndexView(View):
 
             else:
                 self.context["name_signup_form_errors"]["has_errors"] = True
-                self.context["name_signup_form_errors"][
-                    "error"
+                self.context["name_signup_form_errors"]["error"][
+                    "basic"
                 ] = name_signup_form.errors
 
         # Login Form
@@ -1198,14 +1111,16 @@ class IndexView(View):
 
                 if user is None:
                     self.context["login_form_errors"]["has_error"] = True
-                    self.context["login_form_errors"]["error"] = "Invalid Credentials"
+                    self.context["login_form_errors"]["error"][
+                        "basic"
+                    ] = "Invalid Credentials"
 
                 else:
                     if not user.is_active:
                         # Handle inactive user error
                         self.context["login_form_errors"]["has_error"] = True
-                        self.context["login_form_errors"][
-                            "error"
+                        self.context["login_form_errors"]["error"][
+                            "basic"
                         ] = "Your account is inactive. Please contact support."
                     else:
                         login(request, user)
@@ -1217,7 +1132,7 @@ class IndexView(View):
 
             else:
                 self.context["login_form_errors"]["has_error"] = True
-                self.context["login_form_errors"]["error"] = login_form.errors
+                self.context["login_form_errors"]["error"]["basic"] = login_form.errors
 
         # Adds New Blank Data Item in Model
         elif (
@@ -1273,7 +1188,7 @@ class IndexView(View):
 
                     else:
                         instance = DataItemSetModel.objects.get(
-                            item_set_heading=self.request.session.get("current_header"),
+                            item_set_heading=self.session.get("current_header"),
                             user_code=self.session["user_code"],
                         )
 
@@ -1281,11 +1196,9 @@ class IndexView(View):
                     print("update_item: " + e.__str__())
 
                     try:
-                        if self.request.session.get("current_header", "") != "":
+                        if self.session.get("current_header", "") != "":
                             instance = DataItemSetModel.objects.get(
-                                item_set_heading=self.request.session.get(
-                                    "current_header"
-                                ),
+                                item_set_heading=self.session.get("current_header"),
                                 user_code=self.session["user_code"],
                             )
 
@@ -1338,7 +1251,7 @@ class IndexView(View):
 
                 self.context["item_form"] = ItemForm(
                     initial={
-                        "item_heading": self.request.session.get("current_header"),
+                        "item_heading": self.session.get("current_header"),
                         "color": instance.color,
                     },
                     instance=instance,
@@ -1349,7 +1262,7 @@ class IndexView(View):
                     DataItemSetModel.objects.filter(
                         user_code=self.session["user_code"],
                     ).exists()
-                    and self.request.session.get("image_url", "") != ""
+                    and self.session.get("image_url", "") != ""
                 ):
                     self.render_preview_url()
 
@@ -1379,9 +1292,9 @@ class IndexView(View):
                     self.cache_key_header
                 )[0]
 
-                if self.request.session.get("current_header", "") != "":
+                if self.session.get("current_header", "") != "":
                     self.context["inspector_data"] = cache.get(
-                        f"{self.request.session.get('user_code')}-{self.request.session.get('current_header')}"
+                        f"{self.session['user_code']}-{self.session.get('current_header')}"
                     )
 
                 self.render_preview_url()
@@ -1391,7 +1304,7 @@ class IndexView(View):
                 self.request.session["excel_file_name"] = None
                 self.context["excel_file_status"] = False
                 self.context["excel_form_errors"]["has_error"] = True
-                self.context["excel_form_errors"]["error"] = excel_form.errors
+                self.context["excel_form_errors"]["error"]["basic"] = excel_form.errors
 
         # Load the Base Image for Output
         elif (
@@ -1421,7 +1334,7 @@ class IndexView(View):
                             tags=[
                                 self.session["user_code"],
                                 lambda verified_status: "verified"
-                                if self.request.session.get("is_verified")
+                                if self.session.get("is_verified")
                                 else "not verified",
                             ],
                             is_private_file=False,
@@ -1529,7 +1442,7 @@ class IndexView(View):
                 self.context["image_status"] = False
                 self.request.session["image_url"] = None
                 self.context["image_form_errors"]["has_errors"] = True
-                self.context["image_form_errors"]["error"] = image_form.errors
+                self.context["image_form_errors"]["error"]["basic"] = image_form.errors
 
         # Gets the Headers for Inspector Window
         elif self.request.POST.get("inspector_header_item", "") != "":
@@ -1539,18 +1452,19 @@ class IndexView(View):
 
             instance = DataItemSetModel.objects.filter(
                 user_code=self.session["user_code"]
-            ).get(item_set_heading=self.request.session.get("current_header"))
+            ).get(item_set_heading=self.session.get("current_header"))
             self.context["item_form"] = ItemForm(
                 initial={
-                    "item_heading": self.request.session.get("current_header"),
+                    "item_heading": self.session.get("current_header"),
                     "color": instance.color,
                 },
                 instance=instance,
             )
+            # TODO: fix color picker
             self.context["format_reverse"] = True
 
             self.context["inspector_data"] = cache.get(
-                f"{self.request.session.get('user_code')}-{self.request.session.get('current_header')}"
+                f"{self.session['user_code']}-{self.session.get('current_header')}"
             )
 
         # Remove a Header from the Inspector Window
@@ -1566,10 +1480,7 @@ class IndexView(View):
                     item_set_heading=remove_header,
                 )
 
-                if (
-                    self.request.session.get("current_header")
-                    == instance.item_set_heading
-                ):
+                if self.session.get("current_header") == instance.item_set_heading:
                     self.request.session["current_header"] = None
 
                 instance.delete()
@@ -1586,25 +1497,82 @@ class IndexView(View):
             self.request.POST.get("submit") is not None
             and self.request.POST.get("submit") == "update_inspector_data"
         ):
-            new_item_data = self.request.POST.getlist("inspector_data_item")
+            old_item_data = None
+            new_item_data = None
 
-            if self.session["user_code"] != "":
+            if self.request.POST.get("inspector_data_item_new"):
+                new_item_data = self.request.POST.getlist("inspector_data_item_new")
+
+            if self.request.POST.get("inspector_data_item") and cache.get(
+                f"{self.session.get('user_code')}-{self.session.get('current_header')}-full_available"
+            ):
+                old_item_data = self.request.POST.getlist("inspector_data_item")
+
+            if self.session.get("user_code") != "":
                 try:
-                    instance = DataItemSetModel.objects.get(
-                        user_code=self.session["user_code"],
-                        item_set_heading=self.request.session.get("current_header"),
-                    )
+                    instance = DataItemSetModel.objects.filter(
+                        user_code=self.session["user_code"]
+                    ).get(item_set_heading=self.session.get("current_header"))
 
-                    instance.item_set = str(new_item_data)
+                    if old_item_data:
+                        item_set = old_item_data
+                    else:
+                        item_set = ast.literal_eval(str(instance.item_set))
+
+                    if new_item_data:
+                        # Checks if the new items should be added at the top or bottom
+                        if (
+                            self.request.POST.get("inspector_data_item_location")
+                            == "top"
+                        ):
+                            item_set = new_item_data.extend(item_set)
+
+                        else:
+                            item_set = item_set.extend(new_item_data)
+
+                    instance.item_set = item_set
                     instance.save()
 
                     if self.reload_cache(
                         headers=False,
-                        header_items=[str(self.request.session.get("current_header"))],
+                        header_items=[self.session.get("current_header")],
                     ):
                         raise HeaderDataNotFoundError("Missing Header Item")
 
                     self.render_preview_url()
+
+                except Exception as e:
+                    print("update_inspector_data: " + e.__str__())
+                    raise
+
+            else:
+                raise SessionValuesNotFoundError("user_code Not Available")
+
+        # Load all the Data Set List from the Model
+        elif (
+            self.request.POST.get("submit") is not None
+            and self.request.POST.get("submit") == "load_all_inspector_data"
+        ):
+            if self.session["user_code"] != "":
+                try:
+                    instance = DataItemSetModel.objects.get(
+                        user_code=self.session["user_code"],
+                        item_set_heading=self.session.get("current_header"),
+                    )
+
+                    full_item_set_list = ast.literal_eval(instance.item_set)
+
+                    self.context["inspector_data"] = full_item_set_list
+
+                    cache.set(
+                        f'{self.session.get("user_code")}-{instance.item_set_heading}',
+                        str(full_item_set_list),
+                    )
+
+                    cache.set(
+                        f"{self.session.get('user_code')}-{self.session.get('current_header')}-full_available",
+                        True,
+                    )
 
                 except Exception as e:
                     print("update_inspector_data: " + e.__str__())
@@ -1651,7 +1619,7 @@ class IndexView(View):
 
         end_time = time.time()
         elapsed_time = end_time - start_time
-        print(f"\nPOST took {elapsed_time:.6f} seconds to execute.\n")
+        print(f"\nPOST took {elapsed_time:.6f} seconds")
 
 
 def Custom404View(request, exception=None):
@@ -1794,7 +1762,12 @@ def SignupView(request):
 
 @check_time
 def LogoutView(request):
-    cache.clear()
+    keys = cache.keys(f"*{request.session.get('user_code')}*")
+
+    # Delete each key
+    for key in keys:
+        cache.delete(key)
+
     logout(request)
 
     return redirect("index")
