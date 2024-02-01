@@ -195,6 +195,11 @@ def page_renderer(func):
     def wrapper(*args, **kwargs):
         instance = args[0]
         func(*args, **kwargs)
+
+        instance.context["full_available"] = cache.get(
+            f"{self.session.get('user_code')}-{self.session.get('current_header')}-full_available",
+            False,
+        )
         return render(instance.request, instance.home_template, instance.context)
 
     return wrapper
@@ -1574,6 +1579,8 @@ class IndexView(View):
                         True,
                     )
 
+                    self.context["full_available"] = True
+
                 except Exception as e:
                     print("update_inspector_data: " + e.__str__())
                     raise
@@ -1762,11 +1769,14 @@ def SignupView(request):
 
 @check_time
 def LogoutView(request):
-    keys = cache.keys(f"*{request.session.get('user_code')}*")
+    try:
+        keys = cache.keys(f"*{request.session.get('user_code')}*")
 
-    # Delete each key
-    for key in keys:
-        cache.delete(key)
+        # Delete each key
+        for key in keys:
+            cache.delete(key)
+    except:
+        pass
 
     logout(request)
 
