@@ -197,7 +197,7 @@ def page_renderer(func):
         func(*args, **kwargs)
 
         instance.context["full_available"] = cache.get(
-            f"{self.session.get('user_code')}-{self.session.get('current_header')}-full_available",
+            f"{instance.session.get('user_code')}-{instance.session.get('current_header')}-full_available",
             False,
         )
         return render(instance.request, instance.home_template, instance.context)
